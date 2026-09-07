@@ -1,0 +1,22 @@
+environment: gpu
+device: cuda
+random_seed: 42
+dataset:
+  max_documents: 100000
+  working_document_limit: 100000
+tokenizer:
+  type: wordpiece
+  vocab_size: 12000
+model:
+  context_length: 256
+  embedding_dim: 256
+  num_layers: 4
+  num_heads: 4
+  feedforward_dim: 1024
+  dropout: 0.1
+training:
+  batch_size: 16
+  epochs: 3
+  gradient_accumulation_steps: 1
+  mixed_precision: true
+  num_workers: 4

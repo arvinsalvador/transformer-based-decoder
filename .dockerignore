@@ -1,0 +1,15 @@
+# Allowlist: corpora, weights, secrets and local environments cannot enter the image.
+**
+!Dockerfile
+!requirements.txt
+!requirements-dev.txt
+!pyproject.toml
+!README.md
+!app/
+!app/**/*.py
+!src/
+!src/**/*.py
+!config/
+!config/*.yaml
+!tests/
+!tests/**/*.py

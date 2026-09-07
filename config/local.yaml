@@ -1,0 +1,22 @@
+environment: local
+device: auto
+random_seed: 42
+dataset:
+  max_documents: 100000
+  working_document_limit: 1000
+tokenizer:
+  type: wordpiece
+  vocab_size: 8000
+model:
+  context_length: 128
+  embedding_dim: 192
+  num_layers: 3
+  num_heads: 4
+  feedforward_dim: 768
+  dropout: 0.1
+training:
+  batch_size: 4
+  epochs: 2
+  gradient_accumulation_steps: 1
+  mixed_precision: false
+  num_workers: 1

@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
+    ports:
+      - "127.0.0.1:${STREAMLIT_PORT:-8501}:8501"
+    environment:
+      APP_ENV: local
+      CONFIG_PATH: config/local.yaml
+      DEVICE: cpu
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    volumes:
+      - ./app:/workspace/app:ro
+      - ./src:/workspace/src:ro
+      - ./config:/workspace/config:ro
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./checkpoints:/workspace/checkpoints
+      - ./experiments:/workspace/experiments
+      - ./reports:/workspace/reports
