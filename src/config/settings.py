@@ -89,6 +89,11 @@ def validate_config(values: dict[str, Any]) -> None:
             "num_heads",
             "feedforward_dim",
             "dropout",
+            "positional_embedding",
+            "layer_norm_eps",
+            "bias",
+            "tie_embeddings",
+            "initialization_std",
         },
         "training": {
             "batch_size",
@@ -151,6 +156,9 @@ def validate_config(values: dict[str, Any]) -> None:
             elif field == "type":
                 if value != "wordpiece":
                     raise ConfigurationError("tokenizer.type must be wordpiece")
+            elif field == "positional_embedding":
+                if value != "learned":
+                    raise ConfigurationError("model.positional_embedding must be learned")
             elif field == "storage_backend":
                 if value not in ("memory", "sqlite", "auto"):
                     raise ConfigurationError(
@@ -161,10 +169,15 @@ def validate_config(values: dict[str, Any]) -> None:
                     raise ConfigurationError("trigram.smoothing must be add_k")
             elif field == "generation":
                 continue
+            elif field in ("add_k", "layer_norm_eps", "initialization_std"):
+                if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                    raise ConfigurationError(f"{name} must be a finite positive number")
             elif field in (
                 "mixed_precision",
                 "recursive",
                 "lowercase",
+                "bias",
+                "tie_embeddings",
                 "normalize_whitespace",
                 "preserve_case",
                 "preserve_punctuation",
@@ -177,7 +190,6 @@ def validate_config(values: dict[str, Any]) -> None:
                 "dropout",
                 "min_alpha_ratio",
                 "max_control_ratio",
-                "add_k",
                 "train_ratio",
                 "validation_ratio",
                 "test_ratio",

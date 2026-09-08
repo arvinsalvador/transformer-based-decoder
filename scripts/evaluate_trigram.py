@@ -25,14 +25,15 @@ from src.tokenizer.service import load_tokenizer  # noqa: E402
 from src.trigram.serialization import load_model  # noqa: E402
 from src.trigram.trainer import score  # noqa: E402
 
-print(
-    json.dumps(
-        score(
-            load_model(path(args.model) / "trigram_counts.sqlite"),
-            load_tokenizer(path(args.tokenizer)),
-            path(args.test),
-            load_settings(args.config),
-        ),
-        indent=2,
+with load_model(path(args.model) / "trigram_counts.sqlite") as model:
+    print(
+        json.dumps(
+            score(
+                model,
+                load_tokenizer(path(args.tokenizer)),
+                path(args.test),
+                load_settings(args.config),
+            ),
+            indent=2,
+        )
     )
-)

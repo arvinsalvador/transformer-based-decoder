@@ -30,18 +30,18 @@ from src.trigram.serialization import load_model  # noqa: E402
 
 cfg = settings.values["trigram"]["generation"]
 tokenizer = load_tokenizer(path(args.tokenizer))
-model = load_model(path(args.model) / "trigram_counts.sqlite")
-ids, metrics = model.generate(
-    tokenizer.encode(args.prompt, add_special_tokens=False).ids,
-    max_new_tokens=args.max_new_tokens or cfg["max_new_tokens"],
-    strategy=args.strategy or cfg["strategy"],
-    temperature=cfg["temperature"],
-    top_k=cfg["top_k"],
-    seed=args.seed if args.seed is not None else settings.values["random_seed"],
-)
-print(
-    json.dumps(
-        {"text": tokenizer.decode(ids, skip_special_tokens=True), "token_ids": ids, **metrics},
-        indent=2,
+with load_model(path(args.model) / "trigram_counts.sqlite") as model:
+    ids, metrics = model.generate(
+        tokenizer.encode(args.prompt, add_special_tokens=False).ids,
+        max_new_tokens=args.max_new_tokens or cfg["max_new_tokens"],
+        strategy=args.strategy or cfg["strategy"],
+        temperature=cfg["temperature"],
+        top_k=cfg["top_k"],
+        seed=args.seed if args.seed is not None else settings.values["random_seed"],
     )
-)
+    print(
+        json.dumps(
+            {"text": tokenizer.decode(ids, skip_special_tokens=True), "token_ids": ids, **metrics},
+            indent=2,
+        )
+    )

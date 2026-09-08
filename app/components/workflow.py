@@ -6,8 +6,13 @@ SECTIONS = {
     "Documents": "Raw TXT, CSV, PDF, and DOCX ingestion.",
     "Preprocessing": "Normalize, filter, deduplicate, and create canonical splits.",
     "Tokenizer": "Train and inspect a WordPiece tokenizer from the canonical training split.",
-    "Trigram Model": "The trigram baseline will be added in Phase 5.",
-    "Transformer": "The decoder-only architecture will be added in Phase 6.",
+    "Trigram Model": (
+        "Trigram training, scoring, and generation are implemented; final experiments are pending."
+    ),
+    "Transformer": (
+        "Decoder-only architecture implemented; final weights are not trained. "
+        "Training begins in Phase 7."
+    ),
     "Training": "Resource controls and checkpointing will be added in Phase 7.",
     "Evaluation": "Evaluation will be added in Phase 8.",
     "Comparison": "Controlled performance and training-time comparisons belong to Phase 9.",

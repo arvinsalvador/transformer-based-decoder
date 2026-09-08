@@ -95,7 +95,7 @@ class TrigramModel:
             else prompt_ids[-2:]
         )
         for _ in range(max_new_tokens):
-            choices = sorted(self.candidates(*context), key=lambda item: item[1], reverse=True)[
+            choices = sorted(self.candidates(*context), key=lambda item: (-item[1], item[0]))[
                 :top_k
             ]
             if not choices:
@@ -124,3 +124,12 @@ class TrigramModel:
             "tokens_observed": sum(self.unigrams.values()),
             "trigram_events": sum(self.trigrams.values()),
         }
+
+    def close(self):
+        """Memory models own no external resources."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()

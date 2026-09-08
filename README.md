@@ -1,6 +1,6 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 5 — WordPiece trigram baseline.**
+University machine-learning homework. **Status: Phase 6 — decoder-only Transformer architecture.**
 The dashboard, ingestion, streaming preprocessing, canonical splits, and WordPiece
 tokenizer workflow work. Model architecture, training, generation, and evaluation remain future work.
 
@@ -275,6 +275,24 @@ safe SQLite count artifact (`models/trigram/trigram_counts.sqlite`) with paramet
 transactions—never pickle. `trigram_manifest.json` records tokenizer/dataset/split fingerprints,
 smoothing, counts, timing, and artifact size. Generated models remain ignored by Git.
 
+SQLite counting now updates disk tables during the document pass. Its write buffers hold at
+most 4,096 count updates in total and flush in one transaction at that threshold or at the end
+of a document. The SQLite cache is limited to approximately 4 MiB; tokenization still retains
+one document. Primary keys support context-prefix queries without a redundant index. Unique
+counts and event totals use SQL aggregates. Loading either persisted backend returns a read-only
+SQLite model: scoring uses indexed lookups, and generation fetches one context's continuations
+(or the vocabulary-bounded unigram fallback). Use `with load_model(path) as model:` to close it.
+`auto` deterministically selects memory for the local profile and SQLite for the GPU profile;
+manifests record this actual choice. Equal-probability generation ties use ascending token IDs.
+
+Training builds the DB, statistics, and manifest in a unique staging directory. It closes and
+checks the DB and completes optional validation before publishing. Without `--overwrite`, an
+existing artifact is rejected. With it, same-filesystem renames replace the files; caught failures
+restore the previous artifact set and clean staging files. Use exclusive writer access and close
+readers before replacement. Individual renames are atomic, but the three-file publication is not
+a crash-proof transaction: a process kill or power loss during publication can leave staging
+backups requiring recovery. Training duration excludes optional validation and publication.
+
 ```bash
 python scripts/train_trigram.py --train data/splits/train.jsonl --validation data/splits/validation.jsonl --tokenizer models/tokenizer --output models/trigram --config config/local.yaml
 python scripts/evaluate_trigram.py --model models/trigram --test data/splits/test.jsonl --tokenizer models/tokenizer --config config/local.yaml
@@ -288,6 +306,56 @@ has been trained. It does not retain a corpus in session state.
 Limitations are intentional: the model sees only two previous tokens, has sparse count tables,
 cannot represent long-range semantics/coherence, and must fall back for unseen contexts. These are
 the reasons it is a useful baseline rather than a claim that a future Transformer is already better.
+
+## Phase 6 decoder-only Transformer architecture
+
+Phase 6 provides a scratch-initialized PyTorch decoder-only architecture, not a training
+engine. Its WordPiece vocabulary size and `[PAD]` ID come from the canonical tokenizer artifact,
+never the requested YAML vocabulary size. The forward API accepts `LongTensor [B, T]` and returns
+unnormalized logits `[B, T, V]`; it does not apply softmax. Phase 7 will construct shifted
+next-token targets and use `ignore_index=pad_token_id` for padded targets.
+
+```text
+WordPiece IDs → token embeddings + learned positions → dropout
+    → [LayerNorm → causal multi-head attention → residual
+       LayerNorm → GELU feed-forward → residual] × N
+    → final LayerNorm → tied-or-untied vocabulary projection → logits
+```
+
+The blocks use pre-norm residual structure. Attention explicitly projects Q/K/V, splits heads,
+uses PyTorch scaled-dot-product attention, merges heads, and projects back to the embedding
+dimension. Its causal mask allows only current/past positions:
+
+```text
+      1 2 3 4
+1     ✓ × × ×
+2     ✓ ✓ × ×
+3     ✓ ✓ ✓ ×
+4     ✓ ✓ ✓ ✓
+```
+
+An optional `attention_mask` additionally prevents attending to padded key positions; it does
+not replace causality. Learned positional embeddings are bounded by `context_length`; oversized
+sequences fail clearly rather than being silently truncated. Linear/embedding weights use a
+normal initialization (default std 0.02), linear biases are zero, and LayerNorm starts with unit
+scale and zero bias. Tied output embeddings share the exact parameter object.
+
+Custom initialization explicitly zeros the token embedding's padding row after weight tying.
+Embedding lookups suppress gradients for that row; a tied output head can still contribute
+gradients to the shared row in future training. This initialization fix does not freeze the row.
+`add_k`, `layer_norm_eps`, and `initialization_std` accept finite positive values (including values
+above one); dropout and the existing ratio fields retain their original bounds.
+
+```bash
+python scripts/inspect_transformer.py --tokenizer models/tokenizer --config config/local.yaml --forward-test
+python scripts/inspect_transformer.py --tokenizer models/tokenizer --config config/gpu.yaml
+```
+
+The inspector only builds and reports architecture metadata; it never trains. If no tokenizer
+artifact exists, first run the Phase 4 tokenizer workflow. Weight-memory estimates cover parameter
+storage only, not activations, optimizer state, or training memory. The Transformer has up to the
+configured causal context (128 locally, 256 in the GPU profile), while the trigram sees exactly two
+previous tokens; no comparative claim is made until later controlled experiments.
 
 ## Phase 3 preprocessing
 

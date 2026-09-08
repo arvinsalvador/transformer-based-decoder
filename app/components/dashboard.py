@@ -13,9 +13,9 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 5 · Canonical corpus, WordPiece tokenization, and trigram baseline")
+    st.caption("Phase 6 · WordPiece baseline and decoder-only Transformer architecture")
     st.info(
-        "Phases 1–5 are implemented. Final corpus experiments and Transformer training "
+        "Phases 1–6 are implemented. Final corpus experiments and Transformer training "
         "remain pending."
     )
     st.markdown(
@@ -66,7 +66,8 @@ def render_dashboard(settings: Settings) -> None:
         language=None,
     )
     st.caption(
-        "100,000 is a maximum. Start with small local subsets; token counts come in later phases."
+        "100,000 is a maximum. Start with small local subsets; "
+        "WordPiece analysis reports token counts."
     )
     with st.expander("Hardware details and active configuration"):
         st.json(asdict(info))

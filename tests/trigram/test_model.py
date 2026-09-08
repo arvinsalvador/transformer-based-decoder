@@ -20,12 +20,12 @@ def test_document_boundaries_counts_smoothing_and_eos(tmp_path):
     assert score.events == 4 and score.average_nll == -score.log_likelihood / 4
     assert score.perplexity == math.exp(score.average_nll)
     path = save_model(model, tmp_path / "counts.sqlite")
-    loaded = load_model(path)
-    assert (
-        loaded.trigrams == model.trigrams
-        and loaded.score_sequences([[3, 4]]).perplexity
-        == model.score_sequences([[3, 4]]).perplexity
-    )
+    with load_model(path) as loaded:
+        assert (
+            loaded.trigrams == model.trigrams
+            and loaded.score_sequences([[3, 4]]).perplexity
+            == model.score_sequences([[3, 4]]).perplexity
+        )
 
 
 def test_short_prompt_and_seeded_sampling():

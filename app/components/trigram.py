@@ -54,13 +54,11 @@ def render_trigram(settings):
     st.json(manifest)
     prompt = st.text_area("Prompt", "Artificial intelligence can")
     if st.button("Generate"):
-        tokenizer, model = (
-            load_tokenizer(token_dir),
-            load_model(model_dir / "trigram_counts.sqlite"),
-        )
-        ids, metrics = model.generate(
-            tokenizer.encode(prompt, add_special_tokens=False).ids,
-            max_new_tokens=50,
-            seed=settings.values["random_seed"],
-        )
+        tokenizer = load_tokenizer(token_dir)
+        with load_model(model_dir / "trigram_counts.sqlite") as model:
+            ids, metrics = model.generate(
+                tokenizer.encode(prompt, add_special_tokens=False).ids,
+                max_new_tokens=50,
+                seed=settings.values["random_seed"],
+            )
         st.write({"text": tokenizer.decode(ids, skip_special_tokens=True), **metrics})
