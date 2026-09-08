@@ -15,7 +15,10 @@ def test_dashboard_and_placeholders(monkeypatch):
     for section in app.sidebar.radio[0].options[1:]:
         app.sidebar.radio[0].set_value(section).run()
         assert not app.exception
-        assert app.info[0].value == "Available in a later phase"
+        if section == "Documents":
+            assert "Large datasets" in app.info[0].value
+        else:
+            assert app.info[0].value == "Available in a later phase"
 
 
 def test_gpu_profile_warning(monkeypatch):

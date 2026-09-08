@@ -13,6 +13,7 @@ RUN python -m pip install torch==2.10.0 --index-url ${TORCH_INDEX_URL} \
 COPY app ./app
 COPY src ./src
 COPY config ./config
+COPY scripts ./scripts
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=3)"

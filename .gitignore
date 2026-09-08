@@ -26,6 +26,7 @@
 *.pickle
 *.csv
 *.parquet
+*.jsonl
 *.pdf
 *.docx
 .env

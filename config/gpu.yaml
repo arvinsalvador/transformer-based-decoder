@@ -4,6 +4,23 @@ random_seed: 42
 dataset:
   max_documents: 100000
   working_document_limit: 100000
+  max_file_size_mb: 100
+  min_extracted_characters: 20
+  recursive: true
+ingestion:
+  output_format: jsonl
+  output_path: processed/documents.jsonl
+  manifest_dir: ingestion
+  preview_characters: 2000
+  preview_documents: 20
+  max_extracted_characters: 8000000
+  max_docx_uncompressed_mb: 100
+  progress_interval: 1000
+  max_upload_files: 20
+  max_upload_total_mb: 50
+csv:
+  mode: rows
+  text_columns: []
 tokenizer:
   type: wordpiece
   vocab_size: 12000

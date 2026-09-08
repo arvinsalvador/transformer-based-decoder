@@ -13,9 +13,9 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 1 · Project foundation and environment")
+    st.caption("Phase 2 · Document ingestion and dataset management")
     st.info(
-        "Foundation only. Document processing, model training, and evaluation are not implemented."
+        "Raw ingestion is available. Cleaning, model training, and evaluation are future phases."
     )
     st.markdown(
         "Build a decoder-only Transformer with a **WordPiece tokenizer**, using **up to "

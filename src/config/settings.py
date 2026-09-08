@@ -28,7 +28,26 @@ class Settings:
 def validate_config(values: dict[str, Any]) -> None:
     """Reject invalid fields before future phases allocate resources."""
     schema = {
-        "dataset": {"max_documents", "working_document_limit"},
+        "dataset": {
+            "max_documents",
+            "working_document_limit",
+            "max_file_size_mb",
+            "min_extracted_characters",
+            "recursive",
+        },
+        "ingestion": {
+            "output_format",
+            "output_path",
+            "manifest_dir",
+            "preview_characters",
+            "preview_documents",
+            "max_extracted_characters",
+            "max_docx_uncompressed_mb",
+            "progress_interval",
+            "max_upload_files",
+            "max_upload_total_mb",
+        },
+        "csv": {"mode", "text_columns"},
         "tokenizer": {"type", "vocab_size"},
         "model": {
             "context_length",
@@ -69,10 +88,28 @@ def validate_config(values: dict[str, Any]) -> None:
             raise ConfigurationError(f"{section} must contain exactly {sorted(fields)}")
         for field, value in block.items():
             name = f"{section}.{field}"
-            if field == "type":
+            if field in ("output_path", "manifest_dir"):
+                if not isinstance(value, str) or not value.strip():
+                    raise ConfigurationError(f"{name} must be a nonempty path")
+                if Path(value).is_absolute() or ".." in Path(value).parts:
+                    raise ConfigurationError(f"{name} must be relative without parent traversal")
+            elif field == "output_format":
+                if value != "jsonl":
+                    raise ConfigurationError(f"{name} must be jsonl")
+            elif field == "mode":
+                if value not in ("rows", "file"):
+                    raise ConfigurationError(f"{name} must be rows or file")
+            elif field == "text_columns":
+                if (
+                    not isinstance(value, list)
+                    or any(not isinstance(v, str) or not v.strip() for v in value)
+                    or len(value) != len(set(value))
+                ):
+                    raise ConfigurationError(f"{name} must be a list of unique column names")
+            elif field == "type":
                 if value != "wordpiece":
                     raise ConfigurationError("tokenizer.type must be wordpiece")
-            elif field == "mixed_precision":
+            elif field in ("mixed_precision", "recursive"):
                 if type(value) is not bool:
                     raise ConfigurationError(f"{name} must be a boolean")
             elif field == "dropout":
@@ -87,12 +124,23 @@ def validate_config(values: dict[str, Any]) -> None:
                     value,
                     name,
                     0 if field == "num_workers" else 1,
-                    100000 if section == "dataset" else None,
+                    100000 if field in ("max_documents", "working_document_limit") else None,
                 )
     if values["dataset"]["working_document_limit"] > values["dataset"]["max_documents"]:
         raise ConfigurationError("dataset.working_document_limit must be <= dataset.max_documents")
     if values["model"]["embedding_dim"] % values["model"]["num_heads"]:
         raise ConfigurationError("model.embedding_dim must be divisible by model.num_heads")
+    if (
+        values["dataset"]["min_extracted_characters"]
+        > values["ingestion"]["max_extracted_characters"]
+    ):
+        raise ConfigurationError(
+            "min_extracted_characters must not exceed max_extracted_characters"
+        )
+    if values["ingestion"]["preview_characters"] > 2000:
+        raise ConfigurationError("ingestion.preview_characters must be <= 2000")
+    if values["ingestion"]["preview_documents"] > 100:
+        raise ConfigurationError("ingestion.preview_documents must be <= 100")
 
 
 def load_settings(config_path: str | Path | None = None, *, root: Path = PROJECT_ROOT) -> Settings:

@@ -1,8 +1,9 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 1 — foundation and environment only.**
-The dashboard and environment diagnostics work. No document parsing, tokenization,
-model architecture, training, generation, or evaluation is implemented yet.
+University machine-learning homework. **Status: Phase 2 — document ingestion and dataset management.**
+The dashboard, environment diagnostics, Documents page and batch ingestion work.
+Text cleaning, tokenization, model architecture, training, generation, and evaluation
+remain future work. Phase 2 extracts raw text only.
 
 ## Homework requirements
 
@@ -12,31 +13,33 @@ model architecture, training, generation, or evaluation is implemented yet.
 - Start development with small subsets; use the GPU profile for final experiments later.
 
 Document count alone does not describe dataset size. Token counts will be measured
-in later phases. The local profile selects 1,000 documents but Phase 1 loads none.
+in later phases. The local profile allows at most 1,000 candidate records per ingestion run.
+No corpus is loaded until ingestion is explicitly requested.
 The random seed is recorded for later splitting and training; it is not applied to
 any simulated training process.
 
 ## Architecture and directories
 
-The UI calls centralized configuration and device utilities. Future computational
-modules are empty packages; they must remain independent of Streamlit.
+The UI calls centralized configuration/device utilities and the same ingestion API
+as the CLI. Ingestion has no Streamlit or PyTorch dependency at import time. Future
+computational modules remain empty packages.
 
 ```text
 app/                  Streamlit entry point, dashboard component, placeholder pages
 src/config/           YAML loading, validation, environment and path resolution
 src/utils/            Structured CPU/CUDA diagnostics
-src/data/             Phase 2–3 ingestion and preparation placeholder
+src/data/             Discovery, parsers, validation, records, streaming ingestion and statistics
 src/tokenizer/        Phase 4 WordPiece placeholder
 src/trigram/          Phase 5 baseline placeholder
 src/transformer/      Phase 6 decoder placeholder
 src/training/         Phase 7 training and checkpoint placeholder
 src/evaluation/       Phase 8 evaluation placeholder
 config/               local.yaml and gpu.yaml
-scripts/              Reserved for later command-line utilities
-tests/                Configuration, device and Streamlit tests
-data/raw/             Private source documents (TXT/CSV/DOCX/PDF in later phases)
-data/processed/       Generated cleaned data
-data/splits/          Generated dataset splits
+scripts/              ingest_dataset.py batch CLI
+tests/                Configuration, device, Streamlit and synthetic ingestion tests
+data/raw/             Original TXT/CSV/DOCX/PDF sources; uploads stored in unique subdirectories
+data/processed/       Raw extracted JSONL; NOT cleaned text
+data/splits/          Reserved for Phase 3 dataset splits
 models/tokenizer/     Generated tokenizer files
 models/trigram/       Generated baseline artifacts
 models/transformer/   Generated weights
@@ -51,8 +54,9 @@ locations. Large generated artifacts are excluded from version control because t
 are expensive to transfer, may contain private documents, and are reproduced from
 code/configuration. Retain data provenance and experiment recipes as reviewed source
 configuration in later phases. Never commit `.env`, credentials, caches or virtual
-environments. Filenames from future uploads must be treated as untrusted; Phase 1
-accepts no uploads, executes no shell inputs and introduces no pickle loading.
+environments. Uploaded filenames are untrusted: uploads use generated identifiers and
+sanitized basenames. Extracted text is rendered as plain text, never executable HTML.
+The UI executes no shell inputs and introduces no pickle loading.
 
 ## Local setup (WSL recommended)
 
@@ -85,8 +89,9 @@ the same `python -m ...` commands. Make is optional.
 `requirements.txt` pins direct runtime dependencies. CPU/CUDA Torch builds are selected
 by installing Torch from the appropriate official index **before** the shared requirements.
 Transitive dependencies and Docker base images are not fully locked; capture a full
-environment manifest for final controlled experiments. Parsing/tokenizer packages are
-deferred until their phases so the initial environment remains smaller.
+environment manifest for final controlled experiments. PyMuPDF and python-docx now support
+PDF/DOCX extraction. CSV uses Python's streaming csv module. No OCR software, LibreOffice,
+GUI, database or pretrained model is required. Tokenizer packages remain deferred.
 
 ## Configuration
 
@@ -180,7 +185,7 @@ docker compose -f docker-compose.gpu.yml down
 
 The GPU file is **standalone**, not an override to combine with the CPU file. It reserves
 one GPU, sets the GPU profile, and mounts data, models, checkpoints, experiments and
-reports persistently. It launches only the Phase 1 dashboard. Training commands will be
+reports persistently. It launches the dashboard and ingestion UI. Training commands will be
 added in Phase 7. Use an SSH tunnel for a remote dashboard:
 `ssh -L 8501:localhost:8501 user@gpu-server`, then open localhost:8501 locally.
 
@@ -208,9 +213,9 @@ each future section, configuration error handling, and the missing-CUDA warning.
 Container-based checks if a supported local Python is unavailable:
 
 ```bash
-docker build --target test -t homework3-phase1-test .
-docker run --rm homework3-phase1-test
-docker run --rm homework3-phase1-test python -m ruff check .
+docker build --target test -t homework3-phase2-test .
+docker run --rm homework3-phase2-test
+docker run --rm homework3-phase2-test python -m ruff check .
 ```
 
 Optional Make aliases: `make install` (CPU runtime), `make install-dev`, `make test`,
@@ -233,13 +238,12 @@ the Make install targets are intended for local CPU setup.
   then open <http://localhost:8503>. The container still listens internally on port 8501.
 - Permission denied for artifacts: match `LOCAL_UID`/`LOCAL_GID` to the directory owner.
 - Memory pressure: stop unused containers, keep CPU development subsets small, and
-  reduce future batch/context settings. Phase 1 never loads corpora or creates tensors.
+  reduce future batch/context settings. Ingestion processes one source/row at a time and creates no tensors.
 - Dependency download failure: verify access to PyPI and download.pytorch.org, then
   retry the build. Do not substitute a CUDA build on a low-memory local machine.
 
 ## Remaining phases
 
-2. TXT/CSV/DOCX/PDF ingestion.
 3. Cleaning, preparation, dataset splits and token-size accounting.
 4. WordPiece tokenizer.
 5. Trigram baseline.
@@ -249,4 +253,198 @@ the Make install targets are intended for local CPU setup.
 9. Controlled final experiments and comparisons.
 10. Final UI, reporting and validation.
 
-Phase 1 stops at the foundation. No training results or fabricated metrics are present.
+Phase 2 stops at raw extraction. No training results or fabricated metrics are present.
+
+## Phase 2 ingestion workflow
+
+```text
+Discover one source → validate → parse one candidate → write JSONL → update counters
+                                    ↓
+                           bounded preview + manifest
+```
+
+`src/data/models.py` defines typed records, options and statuses; `validators.py` guards
+sources and extraction sizes; `discovery.py` walks directories; `registry.py` selects
+format parsers; `ingestion.py` streams results; `statistics.py` holds counters only;
+`uploads.py` stages small browser batches. `scripts/ingest_dataset.py` and the Documents
+page use `ingest_directory(source_dir, options, output=..., progress=...)`.
+
+Original files remain under `data/raw/` or your chosen external corpus directory.
+Extraction never modifies them. Uploads are copied into unique `data/raw/uploads/`
+subdirectories. JSONL lives under `data/processed/`; manifests default to
+`experiments/ingestion/<unique-run-id>.json`. No cleaned or split dataset is produced.
+
+### Formats and CSV behavior
+
+- TXT: UTF-8 and UTF-8 BOM; Windows-1252 fallback is explicitly recorded as
+  `encoding_fallback: true`. No replacement/ignored undecodable bytes. Binary control
+  characters are rejected. Encoding detection is heuristic, not proof of the original encoding.
+- PDF: PyMuPDF extracts text page by page and records page count. Blank/scanned PDFs
+  become `NO_EXTRACTABLE_TEXT`; encrypted PDFs become `PASSWORD_PROTECTED`. No OCR.
+- DOCX: python-docx extracts body paragraphs and tables in order, including nested
+  table cells, with simple line separation. It records paragraph/table counts. Styling,
+  headers/footers, tracked revisions and floating text boxes are not reconstructed.
+- CSV: UTF-8/BOM, comma delimiter, quoted commas and multiline fields. `rows` creates
+  one candidate per row; `file` concatenates rows into one bounded document. Select
+  text columns explicitly in their desired order, e.g. `title` then `body` separated
+  by a newline. Numeric strings are preserved. Empty selected values are skipped.
+  Missing/duplicate headers, malformed rows, and decoding errors are reported.
+  Width-mismatched rows are rejected individually; a CSV syntax/encoding failure
+  terminates that CSV but ingestion continues with the next source.
+
+The CSV reader advances one logical row at a time, which is finer-grained than chunked
+DataFrames. No chunk-size setting is needed. It retains the standard 128 KiB field
+ceiling to bound unusually large fields. There is no CSV dialect autodetection or
+non-UTF-8 CSV fallback. A literal `null` is text; CSV has no universal null sentinel.
+
+Parser API references: [PyMuPDF text extraction](https://pymupdf.readthedocs.io/en/latest/recipes-text.html)
+and [python-docx document iteration](https://python-docx.readthedocs.io/en/latest/_modules/docx/document.html).
+
+### Small browser uploads
+
+Open **Documents → Upload Files**, select small samples, choose CSV mode/text columns,
+then press **Ingest Dataset**. Results show actual counts, output paths, character
+statistics, type distribution and a capped plain-text preview. Every UI run gets a
+new JSONL filename; it does not overwrite previous results. The page also offers
+**Existing Raw Folder**, using the configured `DATA_DIR/raw` only.
+
+**Streamlit uploads are recommended for development/small datasets. Batch directory
+ingestion is recommended for large datasets and the final GPU-server corpus.**
+Large datasets should be placed in the configured data/raw directory and ingested
+using the batch/server ingestion workflow. Do not upload 100,000 files through a browser.
+Streamlit holds browser uploads in memory before application-level aggregate checks;
+the 20-file/50-MiB batch cap rejects oversized selections, but cannot prevent their
+initial transfer. The uploader's per-file limit is enforced by Streamlit itself.
+
+### Limits, configuration and count semantics
+
+Local additions (GPU changes are noted below):
+
+```yaml
+dataset:
+  max_documents: 100000
+  working_document_limit: 1000
+  max_file_size_mb: 25
+  min_extracted_characters: 20
+  recursive: true
+ingestion:
+  output_format: jsonl
+  output_path: processed/documents.jsonl
+  manifest_dir: ingestion
+  preview_characters: 2000
+  preview_documents: 20
+  max_extracted_characters: 2000000
+  max_docx_uncompressed_mb: 50
+  progress_interval: 100
+  max_upload_files: 20
+  max_upload_total_mb: 50
+csv:
+  mode: rows
+  text_columns: []
+```
+
+This is an excerpt; retain the other Phase 1 fields. GPU defaults use 100,000 working
+candidates, 100 MiB per source, 8,000,000 extracted characters, a 100 MiB DOCX expanded
+size ceiling and progress every 1,000 records. Browser upload limits remain small.
+`output_path` is relative to `DATA_DIR`; `manifest_dir` is relative to `EXPERIMENT_DIR`.
+These paths may not contain parent traversal. CLI source/output paths resolve relative
+to the project root, with absolute external paths accepted. Output/manifest locations
+must be outside the selected corpus tree to avoid ingesting generated artifacts.
+
+The effective cap is never above the smaller of the working limit, configured maximum,
+and 100,000. `--limit` may only lower that cap. Every emitted candidate/rejection
+consumes a slot, including unsupported files, empty rows and parse errors; this bounds
+work even for a bad corpus. Therefore accepted document count can be below the cap.
+CSV row candidates share the same budget with TXT/PDF/DOCX candidates. Ingestion does
+not parse one extra row/file merely to determine whether more input exists.
+`limit_reached` means the budget was exhausted, even if the corpus happened to end there.
+
+Limits apply per run. Never blindly concatenate multiple runs and assume the combined
+corpus remains within the homework cap; later dataset preparation must enforce its
+own final corpus count. Phase 2 neither appends to existing output nor removes duplicates.
+
+### JSONL, manifests and statuses
+
+Each JSONL line contains `document_id` (UUID), source name/path/type, file size,
+`extracted_text`, character count, extraction status/error, UTC timestamp, SHA-256,
+and parser metadata. The hash covers the extracted UTF-8 text, not the original
+binary source, and is calculated once per candidate. Identical text hashes remain
+in the output: duplicate removal belongs to Phase 3. CSV row indexes preserve provenance.
+Text with `TOO_SHORT` or no meaningful characters remains raw in its rejection record.
+
+**Consumers must select `extraction_status == "SUCCESS"` for accepted documents.**
+`records_written` / `total_documents` count all emitted records; `documents_created`
+and `successful` count accepted records only. `successful + skipped + failed` equals
+`records_written`. No-extractable-text and unsupported counts are subsets of skipped.
+Character min/max/average cover all emitted records, including zero-length failures.
+Source bytes count each examined file once, not once per CSV row; a partially read CSV
+still contributes its full on-disk size. Type distributions distinguish files and records.
+
+Statuses: `SUCCESS`, `UNSUPPORTED_TYPE`, `FILE_TOO_LARGE`, `EMPTY_FILE`,
+`NO_EXTRACTABLE_TEXT`, `TOO_SHORT`, `PARSE_ERROR`, `ENCODING_ERROR`,
+`PASSWORD_PROTECTED`, `UNSAFE_PATH`, `READ_ERROR`, and `EXTRACTION_TOO_LARGE`.
+Limit exhaustion is a manifest flag, not a fabricated extra document.
+
+Manifests record the run ID, timestamps, effective options, configuration, source,
+output, counters and state. They contain no document text. JSONL is flushed at progress
+intervals and at completion. An interrupted run retains partial output with an
+`interrupted` manifest; abrupt process termination can leave a `running` manifest.
+Resume/append is intentionally deferred: rerun to a new output path and inspect the
+previous manifest. Existing JSONL is never overwritten.
+
+### Batch CLI examples
+
+Run in an activated environment from the repository root:
+
+```bash
+python scripts/ingest_dataset.py --help
+python scripts/ingest_dataset.py --source data/raw --output data/processed/local-run.jsonl --config config/local.yaml --recursive --limit 100
+python scripts/ingest_dataset.py --source data/raw --output data/processed/csv-run.jsonl --config config/local.yaml --csv-mode rows --text-columns title body
+```
+
+The second CSV command uses those columns for every CSV; sources missing a selected
+column receive controlled errors. `--no-recursive` disables traversal. Defaults use
+the configured raw directory/output location. Repeated commands need new output names.
+
+Container execution (CPU ingestion works on any server; CUDA is unnecessary):
+
+```bash
+docker compose exec app python scripts/ingest_dataset.py --help
+docker compose exec app python scripts/ingest_dataset.py --source data/raw --output data/processed/container-run.jsonl --config config/local.yaml --limit 100
+```
+
+Future GPU-server corpus, using the same Python code:
+
+```bash
+python scripts/ingest_dataset.py --source /datasets/homework3 --output data/processed/server-run.jsonl --config config/gpu.yaml --recursive --limit 100000 --csv-mode rows --text-columns text
+```
+
+For an external corpus in Docker, explicitly mount it read-only:
+
+```bash
+docker compose -f docker-compose.gpu.yml run --rm -v /datasets/homework3:/corpus:ro app python scripts/ingest_dataset.py --source /corpus --output data/processed/server-run.jsonl --config config/gpu.yaml --recursive --text-columns text
+```
+
+CLI exit codes: 0 completed (may include skipped records), 1 completed with failed
+records or an I/O failure, 2 invalid request/configuration or existing output, 130 interrupted.
+Logs contain periodic counts and the first 20 rejection reasons/source names, never
+extracted text; the manifest/JSONL retain complete status accounting.
+
+### Resource safeguards and limitations
+
+Only one bounded document/CSV row and a capped preview remain in memory. Directory
+names are sorted one directory at a time, not globally across the corpus. TXT files
+are byte-bounded; PDF text is bounded after each page; DOCX archives are expansion-checked
+before loading XML. Symlinks are rejected and directory traversal never follows them.
+Use stable local corpus storage: concurrent hostile changes to paths during ingestion
+are outside this filesystem trust model. Parser libraries may allocate native memory
+for one source/page before the extracted-text cap is checked; these guards are not a
+hard process RAM or runtime limit for adversarial PDFs. No OCR or parser worker sandbox
+is introduced in this phase.
+
+Tests create tiny TXT/CSV/PDF/DOCX fixtures dynamically, including corrupt/encrypted
+files and upload traversal attempts. A lightweight 1,000-row CSV test stops at 600,
+checks flushed JSONL during progress callbacks, verifies the preview cap, and checks
+that traced Python memory does not grow like a retained corpus. It is not a 100K benchmark.
+No datasets, binary test fixtures, tokenizer outputs, models or final experiment artifacts
+should be committed. Existing runtime ignores are retained; generated JSONL is also ignored.
