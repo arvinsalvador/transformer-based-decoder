@@ -17,6 +17,8 @@ def test_dashboard_and_placeholders(monkeypatch):
         assert not app.exception
         if section == "Documents":
             assert "Large datasets" in app.info[0].value
+        elif section == "Preprocessing":
+            assert "large corpora" in app.info[0].value
         else:
             assert app.info[0].value == "Available in a later phase"
 

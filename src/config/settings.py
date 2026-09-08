@@ -48,6 +48,25 @@ def validate_config(values: dict[str, Any]) -> None:
             "max_upload_total_mb",
         },
         "csv": {"mode", "text_columns"},
+        "preprocessing": {
+            "unicode_normalization",
+            "normalize_whitespace",
+            "max_consecutive_blank_lines",
+            "preserve_case",
+            "preserve_punctuation",
+            "strip_control_characters",
+            "normalize_nonbreaking_spaces",
+            "min_characters",
+            "max_characters_per_document",
+            "min_alpha_ratio",
+            "max_control_ratio",
+            "max_repeated_character_run",
+            "long_document_policy",
+            "preview_characters",
+            "preview_documents",
+            "progress_interval",
+        },
+        "split": {"train_ratio", "validation_ratio", "test_ratio"},
         "tokenizer": {"type", "vocab_size"},
         "model": {
             "context_length",
@@ -109,16 +128,39 @@ def validate_config(values: dict[str, Any]) -> None:
             elif field == "type":
                 if value != "wordpiece":
                     raise ConfigurationError("tokenizer.type must be wordpiece")
-            elif field in ("mixed_precision", "recursive"):
+            elif field in (
+                "mixed_precision",
+                "recursive",
+                "normalize_whitespace",
+                "preserve_case",
+                "preserve_punctuation",
+                "strip_control_characters",
+                "normalize_nonbreaking_spaces",
+            ):
                 if type(value) is not bool:
                     raise ConfigurationError(f"{name} must be a boolean")
-            elif field == "dropout":
+            elif field in (
+                "dropout",
+                "min_alpha_ratio",
+                "max_control_ratio",
+                "train_ratio",
+                "validation_ratio",
+                "test_ratio",
+            ):
                 if (
                     type(value) not in (int, float)
                     or not math.isfinite(value)
                     or not 0 <= value < 1
                 ):
                     raise ConfigurationError(f"{name} must be a finite number in [0, 1)")
+            elif field == "unicode_normalization":
+                if value not in ("NFC", "NFKC", "NFD", "NFKD"):
+                    raise ConfigurationError(
+                        f"{name} must be a supported Unicode normalization form"
+                    )
+            elif field == "long_document_policy":
+                if value not in ("truncate", "skip"):
+                    raise ConfigurationError(f"{name} must be truncate or skip")
             else:
                 integer(
                     value,
@@ -141,6 +183,18 @@ def validate_config(values: dict[str, Any]) -> None:
         raise ConfigurationError("ingestion.preview_characters must be <= 2000")
     if values["ingestion"]["preview_documents"] > 100:
         raise ConfigurationError("ingestion.preview_documents must be <= 100")
+    preprocessing = values["preprocessing"]
+    if preprocessing["min_characters"] > preprocessing["max_characters_per_document"]:
+        raise ConfigurationError("preprocessing.min_characters must not exceed maximum")
+    if preprocessing["preview_characters"] > 2000 or preprocessing["preview_documents"] > 100:
+        raise ConfigurationError("preprocessing preview limits exceed the UI safety bounds")
+    ratios = values["split"]
+    if not math.isclose(sum(ratios.values()), 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise ConfigurationError("split ratios must sum to 1.0")
+    if any(value <= 0 for value in ratios.values()):
+        raise ConfigurationError("split ratios must all be positive")
+    if not preprocessing["preserve_case"] or not preprocessing["preserve_punctuation"]:
+        raise ConfigurationError("Phase 3 must preserve case and punctuation")
 
 
 def load_settings(config_path: str | Path | None = None, *, root: Path = PROJECT_ROOT) -> Settings:

@@ -1,9 +1,8 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 2 — document ingestion and dataset management.**
-The dashboard, environment diagnostics, Documents page and batch ingestion work.
-Text cleaning, tokenization, model architecture, training, generation, and evaluation
-remain future work. Phase 2 extracts raw text only.
+University machine-learning homework. **Status: Phase 3 — text cleaning and dataset preparation.**
+The dashboard, ingestion, and streaming preprocessing workflow work. Tokenization,
+model architecture, training, generation, and evaluation remain future work.
 
 ## Homework requirements
 
@@ -28,7 +27,7 @@ computational modules remain empty packages.
 app/                  Streamlit entry point, dashboard component, placeholder pages
 src/config/           YAML loading, validation, environment and path resolution
 src/utils/            Structured CPU/CUDA diagnostics
-src/data/             Discovery, parsers, validation, records, streaming ingestion and statistics
+src/data/             Ingestion plus preprocessing, deduplication, and canonical split modules
 src/tokenizer/        Phase 4 WordPiece placeholder
 src/trigram/          Phase 5 baseline placeholder
 src/transformer/      Phase 6 decoder placeholder
@@ -253,7 +252,89 @@ the Make install targets are intended for local CPU setup.
 9. Controlled final experiments and comparisons.
 10. Final UI, reporting and validation.
 
-Phase 2 stops at raw extraction. No training results or fabricated metrics are present.
+Phase 3 stops at corpus preparation. No training results or fabricated metrics are present.
+
+## Phase 3 preprocessing
+
+Phase 3 consumes Phase 2 JSONL without changing it and writes a separate cleaned corpus.
+The order is fixed to prevent leakage:
+
+```text
+Phase 2 JSONL → validate → normalize → quality filter → exact deduplicate → clean JSONL → canonical splits
+```
+
+Deduplication happens before split assignment, so normalized duplicate content cannot land
+in both train and test. The canonical `data/splits/train.jsonl`, `validation.jsonl`, and
+`test.jsonl` files will be shared unchanged by the later trigram and Transformer work.
+
+Normalization is deliberately conservative: it applies configured Unicode normalization,
+converts line endings to LF, optionally converts non-breaking spaces, removes invalid
+control characters, normalizes horizontal whitespace, bounds repeated blank lines, and
+trims edges. It preserves case, punctuation, numbers, URLs, emails, code fragments, file
+paths, technical symbols, and paragraph boundaries. It does not remove stop words, stem,
+lemmatize, or train a tokenizer.
+
+Quality checks reject empty text, too-short text, excessive control characters, extreme
+single-character repetition, and low alphabetic ratio. The defaults are permissive for technical prose. Long documents are
+truncated deterministically by default; the record has `truncated: true` and its original
+character count. Setting `long_document_policy: skip` writes a controlled rejection instead.
+
+Exact duplicate detection uses the normalized UTF-8 SHA-256. Only hashes and first document
+IDs are retained in memory, never the corpus text. The first accepted record in input order
+wins; rejections record `DUPLICATE` and `duplicate_of` without retaining duplicate text.
+
+Splits use a hash bucket derived from `normalized_sha256` and the global `random_seed`.
+This is deterministic and streaming-friendly: no shuffle or full-text collection is needed.
+Actual split counts can differ slightly from requested 80/10/10 proportions. The manifest
+records the seed, requested configuration, actual counts, statistics and dataset fingerprint.
+
+Each accepted clean JSONL record contains its Phase 2 ID/source metadata, raw and normalized
+hashes, normalized text, original/final character counts, status, truncation flag, and preserved
+Phase 2 metadata. Rejected records go to a separate `clean_documents.rejections.jsonl` sidecar
+with no text body. The preprocessing manifest lives under `experiments/preprocessing/`.
+
+Output files are written to unique temporary paths and renamed only after a successful run.
+Existing output requires explicit `--overwrite`; an interrupted run leaves identifiable temporary
+artifacts and an `interrupted` manifest. Phase 3 does not provide resume/append behavior.
+
+### Preprocessing configuration
+
+Both profiles provide centralized `preprocessing` and `split` sections. Local defaults use a
+200,000-character maximum per document and progress every 100 records; GPU defaults raise the
+document maximum to 500,000 and progress interval to 1,000. The configured working-document cap,
+maximum-document cap, and absolute 100,000 homework limit still bound each run.
+
+### Preprocessing UI and CLI
+
+Use **Preprocessing** in Streamlit for small runs and inspection. It keeps only aggregate results,
+paths, and a capped preview in session state. For large corpora, use the batch command on the
+training server:
+
+```bash
+python scripts/prepare_dataset.py --help
+python scripts/prepare_dataset.py \
+  --input data/processed/documents.jsonl \
+  --clean-output data/processed/clean_documents.jsonl \
+  --split-dir data/splits \
+  --config config/local.yaml
+```
+
+GPU-server preparation uses the same CPU code and does not need CUDA:
+
+```bash
+python scripts/prepare_dataset.py \
+  --input data/processed/documents.jsonl \
+  --clean-output data/processed/clean_documents.jsonl \
+  --split-dir data/splits \
+  --config config/gpu.yaml \
+  --limit 100000
+```
+
+Optional `--limit` only lowers the configured cap. `--seed` deliberately overrides the global
+seed for that run and is recorded in its manifest. `--no-split` writes clean JSONL only.
+`--overwrite` explicitly replaces existing output files. The corpus owner is responsible for
+ensuring that source material is appropriate to use; preprocessing does not provide PII/secret
+detection and never logs document bodies.
 
 ## Phase 2 ingestion workflow
 

@@ -21,6 +21,27 @@ ingestion:
 csv:
   mode: rows
   text_columns: []
+preprocessing:
+  unicode_normalization: NFC
+  normalize_whitespace: true
+  max_consecutive_blank_lines: 2
+  preserve_case: true
+  preserve_punctuation: true
+  strip_control_characters: true
+  normalize_nonbreaking_spaces: true
+  min_characters: 50
+  max_characters_per_document: 500000
+  min_alpha_ratio: 0.20
+  max_control_ratio: 0.01
+  max_repeated_character_run: 1000
+  long_document_policy: truncate
+  preview_characters: 1000
+  preview_documents: 20
+  progress_interval: 1000
+split:
+  train_ratio: 0.80
+  validation_ratio: 0.10
+  test_ratio: 0.10
 tokenizer:
   type: wordpiece
   vocab_size: 12000

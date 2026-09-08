@@ -4,7 +4,7 @@ import streamlit as st
 
 SECTIONS = {
     "Documents": "Raw TXT, CSV, PDF, and DOCX ingestion.",
-    "Preprocessing": "Cleaning and dataset splits will be added in Phase 3.",
+    "Preprocessing": "Normalize, filter, deduplicate, and create canonical splits.",
     "Tokenizer": "WordPiece tokenizer training will be added in Phase 4.",
     "Trigram Model": "The trigram baseline will be added in Phase 5.",
     "Transformer": "The decoder-only architecture will be added in Phase 6.",

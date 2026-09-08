@@ -13,7 +13,7 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 2 · Document ingestion and dataset management")
+    st.caption("Phase 3 · Corpus preparation and canonical dataset splits")
     st.info(
         "Raw ingestion is available. Cleaning, model training, and evaluation are future phases."
     )
