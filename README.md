@@ -1,6 +1,6 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 4 — WordPiece tokenizer.**
+University machine-learning homework. **Status: Phase 5 — WordPiece trigram baseline.**
 The dashboard, ingestion, streaming preprocessing, canonical splits, and WordPiece
 tokenizer workflow work. Model architecture, training, generation, and evaluation remain future work.
 
@@ -254,6 +254,40 @@ the Make install targets are intended for local CPU setup.
 10. Final UI, reporting and validation.
 
 Phase 4 stops at tokenization. No language-model training results or fabricated metrics are present.
+
+## Phase 5 trigram baseline
+
+Phase 5 adds a CPU-only, reproducible baseline over the *same* Phase 3 splits and Phase 4
+WordPiece IDs that the future Transformer will use. It estimates
+`P(t_i | t_(i-2), t_(i-1))`. Each document is independently modeled as
+`[BOS] [BOS] tokens [EOS]`; `[PAD]` is never added and no trigram crosses a document boundary.
+
+Counts are unigram, bigram, and trigram counts. Add-k (Lidstone) smoothing prevents a
+zero probability: `(count(w1,w2,w3)+k)/(count(w1,w2)+k*|V|)`, where `|V|` is the actual
+serialized tokenizer vocabulary size. Scoring is read-only and reports log likelihood,
+average negative log likelihood, and `exp(NLL)` perplexity, including EOS prediction events.
+Training time starts at the train-split count pass and ends when the artifact is ready; it
+does not include ingestion, preprocessing, or tokenizer fitting. Generation uses greedy or
+seeded sampling, short-prompt BOS contexts, EOS/max-token stopping, and canonical tokenizer decoding.
+
+The local profile uses memory counting; the GPU/server profile selects SQLite. Both persist a
+safe SQLite count artifact (`models/trigram/trigram_counts.sqlite`) with parameterized SQL and
+transactions—never pickle. `trigram_manifest.json` records tokenizer/dataset/split fingerprints,
+smoothing, counts, timing, and artifact size. Generated models remain ignored by Git.
+
+```bash
+python scripts/train_trigram.py --train data/splits/train.jsonl --validation data/splits/validation.jsonl --tokenizer models/tokenizer --output models/trigram --config config/local.yaml
+python scripts/evaluate_trigram.py --model models/trigram --test data/splits/test.jsonl --tokenizer models/tokenizer --config config/local.yaml
+python scripts/generate_trigram.py --model models/trigram --tokenizer models/tokenizer --prompt "Artificial intelligence" --max-new-tokens 50 --strategy greedy --config config/local.yaml
+```
+
+For final server experiments use the identical commands with `--config config/gpu.yaml`; this
+does not use CUDA. The Trigram Model Streamlit page is artifact-backed and warns when no model
+has been trained. It does not retain a corpus in session state.
+
+Limitations are intentional: the model sees only two previous tokens, has sparse count tables,
+cannot represent long-range semantics/coherence, and must fall back for unseen contexts. These are
+the reasons it is a useful baseline rather than a claim that a future Transformer is already better.
 
 ## Phase 3 preprocessing
 

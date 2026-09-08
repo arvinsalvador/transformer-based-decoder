@@ -13,10 +13,10 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 4 · Corpus preparation, canonical splits, and WordPiece tokenization")
+    st.caption("Phase 5 · Canonical corpus, WordPiece tokenization, and trigram baseline")
     st.info(
-        "Ingestion, preprocessing, and WordPiece vocabulary training are available. "
-        "Model training and evaluation remain future phases."
+        "Phases 1–5 are implemented. Final corpus experiments and Transformer training "
+        "remain pending."
     )
     st.markdown(
         "Build a decoder-only Transformer with a **WordPiece tokenizer**, using **up to "

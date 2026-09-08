@@ -55,6 +55,16 @@ tokenizer:
   lowercase: false
   max_input_characters_per_word: 100
   training_batch_documents: 1000
+trigram:
+  storage_backend: sqlite
+  smoothing: add_k
+  add_k: 0.1
+  min_count: 1
+  generation:
+    strategy: greedy
+    max_new_tokens: 100
+    temperature: 1.0
+    top_k: 50
 model:
   context_length: 256
   embedding_dim: 256

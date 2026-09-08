@@ -68,10 +68,20 @@ def validate_config(values: dict[str, Any]) -> None:
         },
         "split": {"train_ratio", "validation_ratio", "test_ratio"},
         "tokenizer": {
-            "type", "vocab_size", "min_frequency", "continuing_subword_prefix", "special_tokens",
-            "unk_token", "pad_token", "bos_token", "eos_token", "lowercase",
-            "max_input_characters_per_word", "training_batch_documents",
+            "type",
+            "vocab_size",
+            "min_frequency",
+            "continuing_subword_prefix",
+            "special_tokens",
+            "unk_token",
+            "pad_token",
+            "bos_token",
+            "eos_token",
+            "lowercase",
+            "max_input_characters_per_word",
+            "training_batch_documents",
         },
+        "trigram": {"storage_backend", "smoothing", "add_k", "min_count", "generation"},
         "model": {
             "context_length",
             "embedding_dim",
@@ -130,13 +140,27 @@ def validate_config(values: dict[str, Any]) -> None:
                 ):
                     raise ConfigurationError(f"{name} must be a list of unique column names")
             elif field in (
-                "continuing_subword_prefix", "unk_token", "pad_token", "bos_token", "eos_token"
+                "continuing_subword_prefix",
+                "unk_token",
+                "pad_token",
+                "bos_token",
+                "eos_token",
             ):
                 if not isinstance(value, str) or not value:
                     raise ConfigurationError(f"{name} must be a nonempty string")
             elif field == "type":
                 if value != "wordpiece":
                     raise ConfigurationError("tokenizer.type must be wordpiece")
+            elif field == "storage_backend":
+                if value not in ("memory", "sqlite", "auto"):
+                    raise ConfigurationError(
+                        "trigram.storage_backend must be memory, sqlite, or auto"
+                    )
+            elif field == "smoothing":
+                if value != "add_k":
+                    raise ConfigurationError("trigram.smoothing must be add_k")
+            elif field == "generation":
+                continue
             elif field in (
                 "mixed_precision",
                 "recursive",
@@ -153,6 +177,7 @@ def validate_config(values: dict[str, Any]) -> None:
                 "dropout",
                 "min_alpha_ratio",
                 "max_control_ratio",
+                "add_k",
                 "train_ratio",
                 "validation_ratio",
                 "test_ratio",
@@ -178,6 +203,24 @@ def validate_config(values: dict[str, Any]) -> None:
                     0 if field == "num_workers" else 1,
                     100000 if field in ("max_documents", "working_document_limit") else None,
                 )
+    generation = values["trigram"]["generation"]
+    if not isinstance(generation, dict) or set(generation) != {
+        "strategy",
+        "max_new_tokens",
+        "temperature",
+        "top_k",
+    }:
+        raise ConfigurationError(
+            "trigram.generation must contain strategy, max_new_tokens, temperature, top_k"
+        )
+    if generation["strategy"] not in ("greedy", "sample"):
+        raise ConfigurationError("trigram.generation.strategy must be greedy or sample")
+    integer(generation["max_new_tokens"], "trigram.generation.max_new_tokens")
+    integer(generation["top_k"], "trigram.generation.top_k")
+    if type(generation["temperature"]) not in (int, float) or generation["temperature"] <= 0:
+        raise ConfigurationError("trigram.generation.temperature must be > 0")
+    if type(values["trigram"]["add_k"]) not in (int, float) or values["trigram"]["add_k"] <= 0:
+        raise ConfigurationError("trigram.add_k must be > 0")
     if values["dataset"]["working_document_limit"] > values["dataset"]["max_documents"]:
         raise ConfigurationError("dataset.working_document_limit must be <= dataset.max_documents")
     if values["model"]["embedding_dim"] % values["model"]["num_heads"]:
@@ -208,7 +251,9 @@ def validate_config(values: dict[str, Any]) -> None:
     tokenizer = values["tokenizer"]
     if not 1000 <= tokenizer["vocab_size"] <= 50000:
         raise ConfigurationError("tokenizer.vocab_size must be between 1000 and 50000")
-    required_tokens = {tokenizer[key] for key in ("unk_token", "pad_token", "bos_token", "eos_token")}
+    required_tokens = {
+        tokenizer[key] for key in ("unk_token", "pad_token", "bos_token", "eos_token")
+    }
     if len(tokenizer["special_tokens"]) != len(set(tokenizer["special_tokens"])):
         raise ConfigurationError("tokenizer.special_tokens must be unique")
     if len(required_tokens) != 4 or not required_tokens.issubset(tokenizer["special_tokens"]):
