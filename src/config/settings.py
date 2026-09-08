@@ -67,7 +67,11 @@ def validate_config(values: dict[str, Any]) -> None:
             "progress_interval",
         },
         "split": {"train_ratio", "validation_ratio", "test_ratio"},
-        "tokenizer": {"type", "vocab_size"},
+        "tokenizer": {
+            "type", "vocab_size", "min_frequency", "continuing_subword_prefix", "special_tokens",
+            "unk_token", "pad_token", "bos_token", "eos_token", "lowercase",
+            "max_input_characters_per_word", "training_batch_documents",
+        },
         "model": {
             "context_length",
             "embedding_dim",
@@ -118,19 +122,25 @@ def validate_config(values: dict[str, Any]) -> None:
             elif field == "mode":
                 if value not in ("rows", "file"):
                     raise ConfigurationError(f"{name} must be rows or file")
-            elif field == "text_columns":
+            elif field in ("text_columns", "special_tokens"):
                 if (
                     not isinstance(value, list)
                     or any(not isinstance(v, str) or not v.strip() for v in value)
                     or len(value) != len(set(value))
                 ):
                     raise ConfigurationError(f"{name} must be a list of unique column names")
+            elif field in (
+                "continuing_subword_prefix", "unk_token", "pad_token", "bos_token", "eos_token"
+            ):
+                if not isinstance(value, str) or not value:
+                    raise ConfigurationError(f"{name} must be a nonempty string")
             elif field == "type":
                 if value != "wordpiece":
                     raise ConfigurationError("tokenizer.type must be wordpiece")
             elif field in (
                 "mixed_precision",
                 "recursive",
+                "lowercase",
                 "normalize_whitespace",
                 "preserve_case",
                 "preserve_punctuation",
@@ -195,6 +205,16 @@ def validate_config(values: dict[str, Any]) -> None:
         raise ConfigurationError("split ratios must all be positive")
     if not preprocessing["preserve_case"] or not preprocessing["preserve_punctuation"]:
         raise ConfigurationError("Phase 3 must preserve case and punctuation")
+    tokenizer = values["tokenizer"]
+    if not 1000 <= tokenizer["vocab_size"] <= 50000:
+        raise ConfigurationError("tokenizer.vocab_size must be between 1000 and 50000")
+    required_tokens = {tokenizer[key] for key in ("unk_token", "pad_token", "bos_token", "eos_token")}
+    if len(tokenizer["special_tokens"]) != len(set(tokenizer["special_tokens"])):
+        raise ConfigurationError("tokenizer.special_tokens must be unique")
+    if len(required_tokens) != 4 or not required_tokens.issubset(tokenizer["special_tokens"]):
+        raise ConfigurationError("tokenizer special token fields must be distinct and listed")
+    if tokenizer["vocab_size"] <= len(tokenizer["special_tokens"]):
+        raise ConfigurationError("tokenizer.vocab_size must exceed special token count")
 
 
 def load_settings(config_path: str | Path | None = None, *, root: Path = PROJECT_ROOT) -> Settings:

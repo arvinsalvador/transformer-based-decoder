@@ -19,6 +19,8 @@ def test_dashboard_and_placeholders(monkeypatch):
             assert "Large datasets" in app.info[0].value
         elif section == "Preprocessing":
             assert "large corpora" in app.info[0].value
+        elif section == "Tokenizer":
+            assert "Vocabulary training" in app.info[0].value
         else:
             assert app.info[0].value == "Available in a later phase"
 

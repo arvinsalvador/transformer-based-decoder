@@ -1,8 +1,8 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 3 — text cleaning and dataset preparation.**
-The dashboard, ingestion, and streaming preprocessing workflow work. Tokenization,
-model architecture, training, generation, and evaluation remain future work.
+University machine-learning homework. **Status: Phase 4 — WordPiece tokenizer.**
+The dashboard, ingestion, streaming preprocessing, canonical splits, and WordPiece
+tokenizer workflow work. Model architecture, training, generation, and evaluation remain future work.
 
 ## Homework requirements
 
@@ -28,7 +28,7 @@ app/                  Streamlit entry point, dashboard component, placeholder pa
 src/config/           YAML loading, validation, environment and path resolution
 src/utils/            Structured CPU/CUDA diagnostics
 src/data/             Ingestion plus preprocessing, deduplication, and canonical split modules
-src/tokenizer/        Phase 4 WordPiece placeholder
+src/tokenizer/        Phase 4 WordPiece corpus, training, statistics, and load API
 src/trigram/          Phase 5 baseline placeholder
 src/transformer/      Phase 6 decoder placeholder
 src/training/         Phase 7 training and checkpoint placeholder
@@ -89,8 +89,9 @@ the same `python -m ...` commands. Make is optional.
 by installing Torch from the appropriate official index **before** the shared requirements.
 Transitive dependencies and Docker base images are not fully locked; capture a full
 environment manifest for final controlled experiments. PyMuPDF and python-docx now support
-PDF/DOCX extraction. CSV uses Python's streaming csv module. No OCR software, LibreOffice,
-GUI, database or pretrained model is required. Tokenizer packages remain deferred.
+PDF/DOCX extraction. CSV uses Python's streaming csv module. The pinned Hugging Face
+`tokenizers` package provides local WordPiece training. No OCR software, LibreOffice,
+GUI, database or pretrained model is required.
 
 ## Configuration
 
@@ -212,9 +213,9 @@ each future section, configuration error handling, and the missing-CUDA warning.
 Container-based checks if a supported local Python is unavailable:
 
 ```bash
-docker build --target test -t homework3-phase2-test .
-docker run --rm homework3-phase2-test
-docker run --rm homework3-phase2-test python -m ruff check .
+docker build --target test -t homework3-phase4-test .
+docker run --rm homework3-phase4-test
+docker run --rm homework3-phase4-test python -m ruff check .
 ```
 
 Optional Make aliases: `make install` (CPU runtime), `make install-dev`, `make test`,
@@ -243,7 +244,7 @@ the Make install targets are intended for local CPU setup.
 
 ## Remaining phases
 
-3. Cleaning, preparation, dataset splits and token-size accounting.
+3. Cleaning, preparation and dataset splits.
 4. WordPiece tokenizer.
 5. Trigram baseline.
 6. Decoder-only Transformer.
@@ -252,7 +253,7 @@ the Make install targets are intended for local CPU setup.
 9. Controlled final experiments and comparisons.
 10. Final UI, reporting and validation.
 
-Phase 3 stops at corpus preparation. No training results or fabricated metrics are present.
+Phase 4 stops at tokenization. No language-model training results or fabricated metrics are present.
 
 ## Phase 3 preprocessing
 
@@ -529,3 +530,46 @@ checks flushed JSONL during progress callbacks, verifies the preview cap, and ch
 that traced Python memory does not grow like a retained corpus. It is not a 100K benchmark.
 No datasets, binary test fixtures, tokenizer outputs, models or final experiment artifacts
 should be committed. Existing runtime ignores are retained; generated JSONL is also ignored.
+
+## Phase 4 WordPiece tokenizer
+
+Phase 4 trains a genuine Hugging Face `tokenizers` **WordPiece** vocabulary locally. It
+does not download or wrap a pretrained tokenizer. The fitting iterator reads only the
+canonical Phase 3 `data/splits/train.jsonl` file in bounded JSONL batches; validation
+and test splits are encoded only afterwards to report analysis. This keeps vocabulary
+fitting free from validation/test leakage.
+
+The configured special tokens (`[PAD]`, `[UNK]`, `[BOS]`, `[EOS]` by default), unknown
+token, continuation prefix, vocabulary size, minimum frequency, and maximum word length
+are validated in the central YAML profiles. The default tokenizer preserves case to match
+the Phase 3 cleaned corpus. Encoding has no padding or truncation by default; callers can
+explicitly request the configured BOS/EOS post-processing.
+
+Train after preprocessing has created canonical splits:
+
+```bash
+python scripts/train_tokenizer.py --help
+python scripts/train_tokenizer.py \
+  --train data/splits/train.jsonl \
+  --validation data/splits/validation.jsonl \
+  --test data/splits/test.jsonl \
+  --dataset-manifest experiments/preprocessing/<run>.json \
+  --config config/local.yaml
+```
+
+Artifacts are constrained to `models/` (by default `models/tokenizer/`) and refuse to
+replace non-placeholder content unless `--overwrite` is explicit. The output contains
+`tokenizer.json`, WordPiece `vocab.txt`, `tokenizer_config.json`,
+`tokenizer_manifest.json`, and `training_statistics.json`. The manifest records the
+actual/requested vocabulary sizes, special-token IDs, configuration and artifact
+fingerprints, train source/fingerprint when supplied, corpus document/character counts,
+timestamps, duration, package/project versions, and per-split analysis. Statistics cover
+documents, characters, tokens, average/min/max/median/p95 token length, unknown count/rate,
+characters per token, and subword fertility.
+
+Use the **Tokenizer** page for a small local run, a bounded ID-ordered vocabulary preview,
+and encode/decode inspection. For a final corpus, use the CLI on the training server; the
+WordPiece fit is CPU-oriented and the UI never retains the corpus in session state. A missing
+split or malformed JSONL produces a controlled error rather than silently fitting a different
+dataset. Phase 4 creates no neural model, embeddings, checkpoints, trigram model, generation,
+or training/evaluation metrics.

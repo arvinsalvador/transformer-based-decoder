@@ -45,6 +45,16 @@ split:
 tokenizer:
   type: wordpiece
   vocab_size: 12000
+  min_frequency: 2
+  continuing_subword_prefix: "##"
+  special_tokens: ["[PAD]", "[UNK]", "[BOS]", "[EOS]"]
+  unk_token: "[UNK]"
+  pad_token: "[PAD]"
+  bos_token: "[BOS]"
+  eos_token: "[EOS]"
+  lowercase: false
+  max_input_characters_per_word: 100
+  training_batch_documents: 1000
 model:
   context_length: 256
   embedding_dim: 256
