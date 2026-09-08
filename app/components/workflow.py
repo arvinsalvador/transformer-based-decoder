@@ -11,9 +11,9 @@ SECTIONS = {
     ),
     "Transformer": (
         "Decoder-only architecture implemented; final weights are not trained. "
-        "Training begins in Phase 7."
+        "Use the Training page for bounded development runs."
     ),
-    "Training": "Resource controls and checkpointing will be added in Phase 7.",
+    "Training": "Training, validation monitoring, checkpointing, and resume are implemented.",
     "Evaluation": "Evaluation will be added in Phase 8.",
     "Comparison": "Controlled performance and training-time comparisons belong to Phase 9.",
     "Generate Text": "Generation will be added after model implementation and UI integration.",

@@ -9,6 +9,9 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
+from src.config.training import FIELDS as TRAINING_FIELDS
+from src.config.training import validate_training
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -95,13 +98,7 @@ def validate_config(values: dict[str, Any]) -> None:
             "tie_embeddings",
             "initialization_std",
         },
-        "training": {
-            "batch_size",
-            "epochs",
-            "gradient_accumulation_steps",
-            "mixed_precision",
-            "num_workers",
-        },
+        "training": TRAINING_FIELDS,
     }
     expected = {"environment", "device", "random_seed", *schema}
     if set(values) != expected:
@@ -122,6 +119,12 @@ def validate_config(values: dict[str, Any]) -> None:
     integer(values["random_seed"], "random_seed", 0, 2**32 - 1)
     for section, fields in schema.items():
         block = values[section]
+        if section == "training":
+            try:
+                validate_training(block, values["model"]["context_length"])
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+            continue
         if not isinstance(block, dict) or set(block) != fields:
             raise ConfigurationError(f"{section} must contain exactly {sorted(fields)}")
         for field, value in block.items():

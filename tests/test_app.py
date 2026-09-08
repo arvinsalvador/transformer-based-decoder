@@ -25,6 +25,8 @@ def test_dashboard_and_placeholders(monkeypatch):
             assert "never updates counts" in app.info[0].value
         elif section == "Transformer":
             assert "Architecture ready" in app.info[0].value
+        elif section == "Training":
+            assert "Training engine implemented" in app.info[0].value
         else:
             assert app.info[0].value == "Available in a later phase"
 

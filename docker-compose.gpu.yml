@@ -12,6 +12,7 @@ services:
       APP_ENV: gpu
       CONFIG_PATH: config/gpu.yaml
       DEVICE: cuda
+      TOKENIZERS_PARALLELISM: "false"
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     deploy:

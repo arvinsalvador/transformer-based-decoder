@@ -43,7 +43,11 @@ class TokenizerResult:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _configuration_fingerprint(config: dict) -> str:
@@ -178,6 +182,7 @@ def train_wordpiece(
         "continuing_subword_prefix": config["continuing_subword_prefix"],
         "special_tokens": special_ids,
         "source_train_dataset_path": str(source),
+        "training_split_fingerprint": _sha256(source),
         "dataset_fingerprint": dataset_fingerprint,
         "training_corpus_documents": documents,
         "training_corpus_characters": characters,

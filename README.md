@@ -1,8 +1,8 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 6 — decoder-only Transformer architecture.**
-The dashboard, ingestion, streaming preprocessing, canonical splits, and WordPiece
-tokenizer workflow work. Model architecture, training, generation, and evaluation remain future work.
+University machine-learning homework. **Status: Phase 7 — Transformer training engine.**
+Ingestion, preprocessing, WordPiece, trigram scoring/generation, the custom Transformer,
+and single-device training are implemented. Shared evaluation and final experiments are pending.
 
 ## Homework requirements
 
@@ -11,39 +11,38 @@ tokenizer workflow work. Model architecture, training, generation, and evaluatio
 - Compare model performance and training time against a trigram language model.
 - Start development with small subsets; use the GPU profile for final experiments later.
 
-Document count alone does not describe dataset size. Token counts will be measured
-in later phases. The local profile allows at most 1,000 candidate records per ingestion run.
+Document count alone does not describe dataset size. Tokenizer analysis and training report
+token counts. The local profile allows at most 1,000 candidate records per ingestion run.
 No corpus is loaded until ingestion is explicitly requested.
-The random seed is recorded for later splitting and training; it is not applied to
-any simulated training process.
+The random seed is applied to splitting and actual training; no simulated metrics are used.
 
 ## Architecture and directories
 
 The UI calls centralized configuration/device utilities and the same ingestion API
-as the CLI. Ingestion has no Streamlit or PyTorch dependency at import time. Future
-computational modules remain empty packages.
+as the CLI. Ingestion has no Streamlit or PyTorch dependency at import time. Only
+future shared evaluation remains an unimplemented computational phase.
 
 ```text
-app/                  Streamlit entry point, dashboard component, placeholder pages
+app/                  Streamlit entry point, workflow pages and bounded development controls
 src/config/           YAML loading, validation, environment and path resolution
 src/utils/            Structured CPU/CUDA diagnostics
 src/data/             Ingestion plus preprocessing, deduplication, and canonical split modules
 src/tokenizer/        Phase 4 WordPiece corpus, training, statistics, and load API
-src/trigram/          Phase 5 baseline placeholder
-src/transformer/      Phase 6 decoder placeholder
-src/training/         Phase 7 training and checkpoint placeholder
+src/trigram/          WordPiece trigram counting, SQLite persistence, scoring and generation
+src/transformer/      Custom causal decoder model, factory and architecture inspection
+src/training/         Streaming causal sequences, training, precision, checkpoints and monitoring
 src/evaluation/       Phase 8 evaluation placeholder
 config/               local.yaml and gpu.yaml
-scripts/              ingest_dataset.py batch CLI
-tests/                Configuration, device, Streamlit and synthetic ingestion tests
+scripts/              Eight CLIs covering ingestion through Transformer training
+tests/                Phase 1–7 unit, integration, CLI and Streamlit regression tests
 data/raw/             Original TXT/CSV/DOCX/PDF sources; uploads stored in unique subdirectories
 data/processed/       Raw extracted JSONL; NOT cleaned text
-data/splits/          Reserved for Phase 3 dataset splits
+data/splits/          Canonical Phase 3 train/validation/test JSONL
 models/tokenizer/     Generated tokenizer files
 models/trigram/       Generated baseline artifacts
 models/transformer/   Generated weights
-checkpoints/          Future resumable training state
-experiments/          Future experiment metadata, metrics and logs
+checkpoints/          Resumable per-run training state
+experiments/          Run metadata, incremental histories and summaries
 reports/              Generated reports
 ```
 
@@ -185,8 +184,8 @@ docker compose -f docker-compose.gpu.yml down
 
 The GPU file is **standalone**, not an override to combine with the CPU file. It reserves
 one GPU, sets the GPU profile, and mounts data, models, checkpoints, experiments and
-reports persistently. It launches the dashboard and ingestion UI. Training commands will be
-added in Phase 7. Use an SSH tunnel for a remote dashboard:
+reports persistently. It launches Streamlit; the Phase 7 training CLI can also run in this
+service. Use an SSH tunnel for a remote dashboard:
 `ssh -L 8501:localhost:8501 user@gpu-server`, then open localhost:8501 locally.
 
 Without Docker, create the same Python environment on the GPU server, install
@@ -312,8 +311,8 @@ the reasons it is a useful baseline rather than a claim that a future Transforme
 Phase 6 provides a scratch-initialized PyTorch decoder-only architecture, not a training
 engine. Its WordPiece vocabulary size and `[PAD]` ID come from the canonical tokenizer artifact,
 never the requested YAML vocabulary size. The forward API accepts `LongTensor [B, T]` and returns
-unnormalized logits `[B, T, V]`; it does not apply softmax. Phase 7 will construct shifted
-next-token targets and use `ignore_index=pad_token_id` for padded targets.
+unnormalized logits `[B, T, V]`; it does not apply softmax. Phase 7 constructs shifted
+next-token targets and uses `ignore_index=-100` for padded targets.
 
 ```text
 WordPiece IDs → token embeddings + learned positions → dropout
@@ -675,3 +674,196 @@ WordPiece fit is CPU-oriented and the UI never retains the corpus in session sta
 split or malformed JSONL produces a controlled error rather than silently fitting a different
 dataset. Phase 4 creates no neural model, embeddings, checkpoints, trigram model, generation,
 or training/evaluation metrics.
+
+## Phase 7 Transformer training engine
+
+The reusable engine in `src/training/` trains the existing custom Phase 6 model;
+there are no pretrained weights, external trainers, or distributed dependencies.
+`scripts/train_transformer.py` and the Training page call the same service.
+
+### Objective and bounded data pipeline
+
+Training accepts only canonical `data/splits/train.jsonl`,
+`data/splits/validation.jsonl`, and `models/tokenizer/` (or their configured runtime
+root equivalents). It never opens the test split. The actual WordPiece vocabulary,
+special-token IDs, tokenizer JSON SHA-256, train/validation SHA-256, and architecture
+fingerprint are checked and recorded. Newly generated preprocessing manifests include
+split hashes, and newly fitted tokenizer manifests include the training-source hash.
+An optional `--dataset-manifest experiments/preprocessing/<run>.json` checks this
+provenance. Legacy tokenizer manifests without the source hash produce a warning:
+the current input bytes are fingerprinted, but historical fitting provenance cannot
+be reconstructed. A declared whole-corpus fingerprint is not a substitute for the
+actual train/validation hashes. Resume requires matching fingerprints and vocabulary.
+
+Each document becomes `[BOS] tokens [EOS]`, independently of every other document.
+A window of up to `context_length + 1` source tokens produces `window[:-1]` inputs
+and `window[1:]` targets. Thus context length is the maximum **input** length, not
+the source-window length. Short final chunks are retained; there is no cross-document
+packing or invisible transition. `sequence_stride <= context_length` permits overlap;
+the defaults use full-context strides. Validation uses full-context strides and no shuffle.
+The collator pads inputs with the actual PAD ID, targets with `-100`, and returns a
+boolean real-position mask. Causal attention and padding attention remain separate;
+cross-entropy consumes raw logits and ignores only padded targets.
+
+The IterableDataset tokenizes one document at a time. Workers partition line indices
+by `line_index % num_workers`; each scans the file but only parses/tokenizes its own
+records. A deterministic, epoch-seeded bounded shuffle buffer holds sequences, not the
+whole corpus. Memory therefore includes one document per worker plus each worker's
+buffer, prefetched batches, model, gradients, and optimizer states. An unusually large
+single document can still consume significant RAM. Spawn workers, one-batch prefetch,
+shared epoch state for persistent workers, and explicit worker shutdown are supported.
+Validation is ordered with zero workers. Local defaults use one worker and a 1,000-item
+buffer; GPU defaults use four workers, pinned memory, persistence, and 10,000 items
+**per worker**. Reduce these values if host memory is constrained.
+
+### Updates, precision, and recovery
+
+AdamW excludes biases and LayerNorm vectors from weight decay and counts tied weights
+once. Linear warmup followed by cosine decay is indexed by optimizer updates, not
+microbatches. Warmup is capped to the schedule horizon. With `max_steps: null`, a
+streaming count-only pass determines the horizon without retaining tokenized data.
+With a step limit, that limit supplies the horizon. Limits are total optimizer steps,
+including already completed steps when resuming; the epoch limit also applies.
+
+Backward accumulates **summed** token losses. At the update boundary, FP16 gradients
+are unscaled, divided by the actual accumulated valid-target count, clipped with
+`clip_grad_norm_`, and stepped. The final partial group uses its actual token count,
+so neither padding nor shorter batches distort the objective or discard gradients.
+Nominal effective single-GPU sequence batch = microbatch size × accumulation steps;
+partial groups can be smaller. Training and validation NLL are token-weighted;
+monitoring perplexity is `exp(NLL)`, or infinity on overflow.
+
+CPU uses FP32; explicit CPU FP16/BF16 is rejected. CUDA `precision: auto` prefers
+PyTorch-reported BF16 support and otherwise chooses FP16. Explicit unsupported BF16
+fails clearly. FP16 uses modern autocast and GradScaler; BF16 uses autocast without
+a scaler. `mixed_precision: false` selects FP32. `DEVICE=cuda` requires CUDA and
+never silently falls back to CPU. Actual precision and environment are recorded.
+Python, NumPy, CPU and CUDA RNGs are seeded. Deterministic mode can reduce performance;
+bit-identical results across hardware/PyTorch versions are not promised.
+
+Validation runs without gradients at epoch ends and step-limit stops. Lowest validation
+NLL selects `best.pt`; early stopping separately applies `min_delta` and `patience`.
+Checkpoints contain model, AdamW, schedule, optional scaler, counters, early-stopping
+state, configuration, fingerprints, and RNGs. Loading uses `weights_only=True` on
+project-generated state dictionaries, never whole model objects. Resume reconstructs
+the deterministic stream and skips previously consumed batches, then restores the
+saved RNG state. This costs replay time; keep worker/data/batch/shuffle settings fixed.
+Only epoch and step limits may change. Increasing a limit does **not** restart or
+stretch the saved LR schedule: beyond its original horizon the minimum LR applies.
+Increase `--epochs` as well if the saved run has exhausted its epoch allowance.
+
+Each checkpoint file is staged and atomically replaced; archive retention never
+prunes `best.pt` or `latest.pt`. Ctrl+C records `INTERRUPTED` and, when safe, saves
+the last complete optimizer boundary; partial gradients are discarded and replayed.
+An interruption inside an optimizer mutation relies on the previous valid checkpoint.
+OOM records `FAILED_OOM`; NaN/Inf loss or gradients record `FAILED_NONFINITE` and
+stop before publishing a bad best export. Other statuses are `RUNNING`, `COMPLETED`,
+`EARLY_STOPPED`, `FAILED_CONFIGURATION`, and `FAILED_OTHER`. There is no automatic
+OOM retry loop: reduce microbatch size/context, then use accumulation to recover the
+desired effective batch. Previous valid checkpoints/exports are preserved on failure.
+
+### Runtime artifacts
+
+```text
+experiments/training/<run_id>/
+  resolved_config.json  environment.json  history.csv  training.log  summary.json
+checkpoints/<run_id>/
+  latest.pt  best.pt  checkpoint_step_*.pt  interrupt.pt (when interrupted safely)
+models/transformer/
+  best_model.pt  model_manifest.json
+```
+
+History is appended incrementally, with optimizer steps, losses, throughput, LR,
+gradient norm, RSS, and CUDA allocated/reserved/peak memory where available. Training
+elapsed time begins before batch processing and includes training/validation; it
+excludes ingestion, preprocessing, tokenizer fitting, and initial setup. The overall
+attempt duration in the summary also includes final export work.
+
+Successful training exports the best validation **state_dict**, not necessarily the
+latest weights. Its manifest records architecture, vocabulary, fingerprints, parameter
+count, precision, best epoch/step/NLL/perplexity, timing, tokens, size, and environment.
+Existing exports require `--overwrite-export`. Model/manifest staging and backup
+rollback protect against caught write failures. Atomicity is per file, not a power-loss
+transaction across multiple files: use one writer per run/export directory and retain
+checkpoints for recovery. Do not manually edit checkpoint contents.
+
+### CLI: local checks and resume
+
+After preparing canonical splits and fitting WordPiece, use the local profile first.
+These commands are examples for your runtime data, not a claim of a final corpus run.
+
+```bash
+python scripts/train_transformer.py --help
+DEVICE=cpu python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/local.yaml --dry-run
+DEVICE=cpu python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/local.yaml --max-steps 5
+DEVICE=cpu python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/local.yaml \
+  --resume checkpoints/<run_id>/latest.pt --max-steps 10 --epochs 4 --overwrite-export
+```
+
+Dry run performs one forward/loss/backward/gradient check and writes diagnostic
+metadata, but takes no optimizer step and writes no model/checkpoint export.
+`--output` selects a run-container directory beneath the configured experiment root;
+`--run-name` is a label, not an arbitrary filesystem path. Real CLI runs validate the
+entire validation split, even when optimizer steps are bounded.
+
+The Streamlit Training page shows environment/configuration, runs a dry check or a
+synchronous small run (default 5, hard maximum 100 optimizer steps), and lists recent
+run summaries without loading entire histories. It additionally caps local model size,
+microbatch/accumulation, shuffle, workers, and validation to two batches. Such UI
+validation is explicitly marked as a subset in metadata and is not a final benchmark.
+There are no detached training jobs. Use the CLI for server work.
+
+### GPU server workflow (future execution)
+
+Obtain a fresh clone under your own Git control; all engine source, dependencies,
+profiles, scripts and tests belong in the repository. Create runtime directories as
+described above, verify the host NVIDIA driver (`nvidia-smi`), Docker, and NVIDIA
+Container Toolkit, then build the GPU image. The host driver must support the CUDA
+runtime selected by the image (see the earlier GPU compatibility section). Do not
+install host drivers inside the container. CPU builds use the CPU wheel index;
+`docker-compose.gpu.yml` selects CUDA 12.8 wheels and requests one GPU on service `app`.
+
+```bash
+docker compose -f docker-compose.gpu.yml build
+docker compose -f docker-compose.gpu.yml run --rm app \
+  python -c "import torch; print(torch.__version__, torch.version.cuda); assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+```
+
+Provide the raw corpus, then run the documented Phase 2 ingestion, Phase 3 preparation,
+Phase 4 tokenizer, Phase 5 trigram, and Phase 6 architecture-inspection commands in
+that order. Keep the same canonical split/tokenizer artifacts for the comparison.
+Next run only the following dry check and a short sanity run:
+
+```bash
+DEVICE=cuda python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/gpu.yaml --dry-run
+docker compose -f docker-compose.gpu.yml run --rm app \
+  python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/gpu.yaml --dry-run
+```
+
+Replace `--dry-run` with `--max-steps 5` for a bounded real GPU check. The eventual
+full command below is **reserved for Phase 9**, after Phase 8 shared evaluation;
+do not execute it as a Phase 7 check:
+
+```bash
+DEVICE=cuda python scripts/train_transformer.py \
+  --train data/splits/train.jsonl --validation data/splits/validation.jsonl \
+  --tokenizer models/tokenizer --config config/gpu.yaml --output experiments/training
+```
+
+GPU code is implemented, but CUDA runtime execution must be verified on the actual
+server; CPU tests and mocked precision tests do not establish GPU success or throughput.
+No final test evaluation, Transformer generation framework, or 100K experiment belongs
+to Phase 7. Do not commit datasets, split JSONL, tokenizer vocabulary/artifacts, trigram
+databases, model weights, checkpoints/optimizer states, histories/logs/manifests,
+TensorBoard/profiler output, `.env`, or secrets. Commit source/config/tests/docs only;
+runtime directories remain ignored. No local-only notebook/helper is required.

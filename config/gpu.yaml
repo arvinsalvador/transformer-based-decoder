@@ -83,3 +83,29 @@ training:
   gradient_accumulation_steps: 1
   mixed_precision: true
   num_workers: 4
+  optimizer: adamw
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.95
+  epsilon: 1.0e-8
+  scheduler: cosine
+  warmup_steps: 500
+  min_learning_rate_ratio: 0.1
+  max_grad_norm: 1.0
+  precision: auto
+  pin_memory: true
+  persistent_workers: true
+  shuffle_buffer_size: 10000
+  sequence_stride: 256
+  logging_steps: 50
+  deterministic: false
+  max_steps: null
+  checkpoint:
+    save_every_steps: 1000
+    save_every_epoch: true
+    keep_last_n: 3
+  early_stopping:
+    enabled: true
+    patience: 2
+    min_delta: 0.0

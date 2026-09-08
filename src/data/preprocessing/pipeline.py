@@ -291,6 +291,13 @@ def prepare_dataset(
                     sink.close()
         for target, interim in temporary.items():
             interim.replace(target)
+        summary["split_fingerprints"] = {}
+        if make_splits:
+            for name, path in targets.items():
+                with path.open("rb") as stream:
+                    summary["split_fingerprints"][name] = hashlib.file_digest(
+                        stream, "sha256"
+                    ).hexdigest()
         summary["state"] = "completed"
     except BaseException:
         summary["state"] = "interrupted"

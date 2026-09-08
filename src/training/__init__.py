@@ -1,1 +1,1 @@
-"""src training package; Phase 1 foundation."""
+"""Phase 7 single-device Transformer training and validation monitoring."""

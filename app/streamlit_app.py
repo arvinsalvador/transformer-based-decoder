@@ -6,14 +6,15 @@ from app.components.dashboard import render_dashboard
 from app.components.documents import render_documents
 from app.components.preprocessing import render_preprocessing
 from app.components.tokenizer import render_tokenizer
+from app.components.training import render_training
 from app.components.transformer import render_transformer
 from app.components.trigram import render_trigram
 from app.components.workflow import SECTIONS, render_placeholder
 from src.config.settings import ConfigurationError, load_settings
 
-st.set_page_config(page_title="Decoder LM · Phase 6", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Decoder LM · Phase 7", page_icon="📚", layout="wide")
 st.sidebar.title("Decoder LM")
-st.sidebar.caption("University ML project · Phase 6")
+st.sidebar.caption("University ML project · Phase 7")
 section = st.sidebar.radio("Workspace", ["Dashboard", *SECTIONS])
 try:
     settings = load_settings()
@@ -33,5 +34,7 @@ elif section == "Trigram Model":
     render_trigram(settings)
 elif section == "Transformer":
     render_transformer(settings)
+elif section == "Training":
+    render_training(settings)
 else:
     render_placeholder(section)

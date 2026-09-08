@@ -11,6 +11,7 @@ services:
       APP_ENV: local
       CONFIG_PATH: config/local.yaml
       DEVICE: cpu
+      TOKENIZERS_PARALLELISM: "false"
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
