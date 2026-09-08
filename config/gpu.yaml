@@ -1,4 +1,14 @@
 environment: gpu
+evaluation:
+  document_limit: null
+  transformer_batch_size: 32
+  precision: auto
+  gpu_warmup_batches: 1
+  generation:
+    strategy: greedy
+    max_new_tokens: 50
+    temperature: 1.0
+    top_k: 50
 device: cuda
 random_seed: 42
 dataset:

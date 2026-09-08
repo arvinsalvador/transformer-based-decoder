@@ -94,6 +94,7 @@ class TrigramModel:
             if len(prompt_ids) == 1
             else prompt_ids[-2:]
         )
+        stopped_on_eos = False
         for _ in range(max_new_tokens):
             choices = sorted(self.candidates(*context), key=lambda item: (-item[1], item[0]))[
                 :top_k
@@ -106,11 +107,13 @@ class TrigramModel:
                 weights = [prob ** (1 / temperature) for _, prob in choices]
                 next_id = rng.choices([token for token, _ in choices], weights=weights, k=1)[0]
             if next_id == self.eos_id:
+                stopped_on_eos = True
                 break
             generated.append(next_id)
             context = [context[-1], next_id]
         duration = perf_counter() - start
         return generated, {
+            "stopped_on_eos": stopped_on_eos,
             "generated_tokens": len(generated),
             "duration_seconds": duration,
             "tokens_per_second": len(generated) / duration if duration else 0.0,

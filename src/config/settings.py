@@ -9,6 +9,8 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
+from src.config.evaluation import FIELDS as EVALUATION_FIELDS
+from src.config.evaluation import validate_evaluation
 from src.config.training import FIELDS as TRAINING_FIELDS
 from src.config.training import validate_training
 
@@ -99,6 +101,7 @@ def validate_config(values: dict[str, Any]) -> None:
             "initialization_std",
         },
         "training": TRAINING_FIELDS,
+        "evaluation": EVALUATION_FIELDS,
     }
     expected = {"environment", "device", "random_seed", *schema}
     if set(values) != expected:
@@ -119,6 +122,12 @@ def validate_config(values: dict[str, Any]) -> None:
     integer(values["random_seed"], "random_seed", 0, 2**32 - 1)
     for section, fields in schema.items():
         block = values[section]
+        if section == "evaluation":
+            try:
+                validate_evaluation(block)
+            except ValueError as exc:
+                raise ConfigurationError(str(exc)) from exc
+            continue
         if section == "training":
             try:
                 validate_training(block, values["model"]["context_length"])

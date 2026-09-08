@@ -14,9 +14,9 @@ SECTIONS = {
         "Use the Training page for bounded development runs."
     ),
     "Training": "Training, validation monitoring, checkpointing, and resume are implemented.",
-    "Evaluation": "Evaluation will be added in Phase 8.",
-    "Comparison": "Controlled performance and training-time comparisons belong to Phase 9.",
-    "Generate Text": "Generation will be added after model implementation and UI integration.",
+    "Evaluation": "Shared test evaluation is implemented; final experiments remain pending.",
+    "Comparison": "Measured comparisons and generation examples are implemented.",
+    "Generate Text": "View paired continuations generated during shared evaluation.",
     "Experiments": "Controlled experiments and reporting belong to Phases 9–10.",
 }
 

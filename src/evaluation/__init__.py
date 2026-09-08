@@ -1,1 +1,1 @@
-"""src evaluation package; Phase 1 foundation."""
+"""Shared read-only likelihood and generation comparison."""

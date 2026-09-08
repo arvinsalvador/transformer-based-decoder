@@ -1,8 +1,8 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 7 — Transformer training engine.**
+University machine-learning homework. **Status: Phase 8 — Shared evaluation and comparison.**
 Ingestion, preprocessing, WordPiece, trigram scoring/generation, the custom Transformer,
-and single-device training are implemented. Shared evaluation and final experiments are pending.
+single-device training, and shared evaluation are implemented. Final experiments remain pending.
 
 ## Homework requirements
 
@@ -19,8 +19,8 @@ The random seed is applied to splitting and actual training; no simulated metric
 ## Architecture and directories
 
 The UI calls centralized configuration/device utilities and the same ingestion API
-as the CLI. Ingestion has no Streamlit or PyTorch dependency at import time. Only
-future shared evaluation remains an unimplemented computational phase.
+as the CLI. Ingestion has no Streamlit or PyTorch dependency at import time.
+Evaluation shares canonical components without calling any training API.
 
 ```text
 app/                  Streamlit entry point, workflow pages and bounded development controls
@@ -31,10 +31,10 @@ src/tokenizer/        Phase 4 WordPiece corpus, training, statistics, and load A
 src/trigram/          WordPiece trigram counting, SQLite persistence, scoring and generation
 src/transformer/      Custom causal decoder model, factory and architecture inspection
 src/training/         Streaming causal sequences, training, precision, checkpoints and monitoring
-src/evaluation/       Phase 8 evaluation placeholder
+src/evaluation/       Shared read-only scoring, generation, comparison and artifact exports
 config/               local.yaml and gpu.yaml
-scripts/              Eight CLIs covering ingestion through Transformer training
-tests/                Phase 1–7 unit, integration, CLI and Streamlit regression tests
+scripts/              Nine CLIs covering ingestion through shared model evaluation
+tests/                Phase 1–8 unit, integration, CLI and Streamlit regression tests
 data/raw/             Original TXT/CSV/DOCX/PDF sources; uploads stored in unique subdirectories
 data/processed/       Raw extracted JSONL; NOT cleaned text
 data/splits/          Canonical Phase 3 train/validation/test JSONL
@@ -867,3 +867,201 @@ to Phase 7. Do not commit datasets, split JSONL, tokenizer vocabulary/artifacts,
 databases, model weights, checkpoints/optimizer states, histories/logs/manifests,
 TensorBoard/profiler output, `.env`, or secrets. Commit source/config/tests/docs only;
 runtime directories remain ignored. No local-only notebook/helper is required.
+
+## Phase 8 shared evaluation and comparison
+
+The evaluation framework is implemented; **final full-corpus results are not yet
+available**. Phase 9 remains a separate, user-controlled experiment. Evaluation never
+trains either model, fits WordPiece, updates counts/weights, chooses checkpoints,
+or changes the test split. Temporary synthetic test fixtures create tiny models only
+to test the framework; no production artifacts are required for the test suite.
+
+### Fairness and exact prediction events
+
+Both adapters read the same canonical `DATA_DIR/splits/test.jsonl`, in the same order,
+using the same canonical WordPiece tokenizer, vocabulary, and document limit. A
+shared streaming iterator holds one document at a time; the Transformer adapter
+batches only a bounded number of causal windows. There is no full-corpus token list.
+
+The common targets for document `A B C` are **A, B, C, EOS**. Trigram uses histories
+`BOS,BOS → A`, `BOS,A → B`, `A,B → C`, `B,C → EOS`; its two BOS history tokens create
+no extra target. Transformer uses the Phase 7 causal shift from `BOS A B C EOS`.
+Empty documents contribute the single EOS event. Documents never share context.
+Literal PAD in test text is rejected rather than silently changing the denominator.
+
+Transformer scoring always uses `stride = context_length`, irrespective of training
+overlap. Each window consumes up to context+1 source IDs, and its labels are scored
+exactly once. Adjacent windows share a boundary input token but **not a target event**.
+Long documents reset learned positions at each window and lose earlier context at
+that boundary. This matches the Phase 7 non-overlapping validation policy; it is not
+a maximum-context sliding-window likelihood estimator. Trigram keeps its two-token
+history throughout each document. These designed context differences are disclosed,
+not disguised by restricting the Transformer to two tokens.
+
+```text
+Trigram:      P(t_i | t_(i-2), t_(i-1))
+Transformer:  P(t_i | preceding tokens within the active context window)
+Average NLL:  -1/N × sum(log P(t_i | context))
+Perplexity:   exp(average NLL)
+Bits/token:   average NLL / ln(2)
+```
+
+Natural logarithms and exact valid-target counts are used. Matching WordPiece makes
+token-level NLL/perplexity substantially more defensible than comparing different
+tokenizations, but does not make all architectural conditions identical. No test
+hyperparameter tuning or model selection is performed. The software does not assume
+the Transformer wins; factual summaries reflect the measured values.
+
+### Identity and read-only guarantees
+
+The canonical tokenizer JSON hash must match both model manifests; actual vocabulary,
+special IDs, SQLite metadata, and Transformer architecture are checked. Available
+corpus/training-source hashes must agree. `--dataset-manifest` checks a completed
+preprocessing manifest, including its test/train/validation hashes where supplied.
+A changed historical test split fails when its recorded hash is available. Without
+that manifest/hash, a warning explicitly states that historical test identity cannot
+be proven; hashing current bytes cannot recover missing historical provenance.
+
+The actual test, tokenizer, prompts, model files and manifests are hashed before and
+after evaluation. Changed inputs fail publication of a complete comparison. Both
+adapters must report identical documents/events/test/tokenizer identities before a
+primary comparison is emitted. This is a stable-input workflow, not a snapshot or
+concurrent-writer system: do not replace artifacts during evaluation.
+
+SQLite is opened using the Phase 5 read-only loader and queries counts directly;
+it never materializes all n-gram tables. Transformer loads only its exported
+`best_model.pt` state dictionary using `weights_only=True`, validates the canonical
+architecture, disables parameter gradients, and uses `eval()`/`inference_mode()`.
+No optimizer or training service is imported by the evaluation engine.
+
+### Metrics and timing definitions
+
+Results record documents, targets, total log-likelihood/negative log-likelihood,
+average NLL, perplexity, bits/token, scoring duration, target throughput, actual
+device/precision, model identity, and model size. Overflow returns infinity in the
+Python metric and the explicit string `"inf"` in portable JSON (JSON has no infinity
+number). Missing metrics remain `null` with reasons, not guessed zeroes.
+
+Model size is the deployed SQLite database versus exported Transformer state_dict,
+excluding optimizer/checkpoint/history files. Manifest size is excluded for both.
+Transformer parameters are counted from the instantiated architecture; distinct
+unigram/bigram/trigram counts are separately labeled, not called parameters.
+Training duration and explicitly available training-resource fields are read from
+existing manifests; there is no retraining to measure them. Earlier manifests may
+lack peak training RAM/VRAM or throughput; these remain unavailable. RAM and VRAM
+are separate metrics, never combined. Trigram recorded time includes its established
+count/build/persistence work; Transformer recorded time includes training/validation
+after initial setup. Neither includes preprocessing or tokenizer fitting.
+
+Scoring uses `perf_counter` and includes streaming/tokenization/collation/model
+scoring, but excludes model loading, fingerprint scans, warmup and export. CUDA is
+synchronized around the measured scoring section. Optional CUDA warmup replays only
+the first bounded batch without counting it; the measured pass restarts and scores
+every target. CPU uses FP32; CUDA precision reuses Phase 7 auto/BF16/FP16 selection.
+Actual precision and warmup count are recorded. Lower the configurable evaluation
+batch size on OOM; the engine fails rather than skipping examples or silently retrying.
+
+Relative results are Transformer/trigram training-time, model-size and scoring
+throughput ratios, plus `(trigram PPL - Transformer PPL) / trigram PPL × 100`.
+Zero, null and nonfinite denominators return unavailable ratios. Hardware, software,
+CPU/GPU availability and system RAM are recorded. CPU trigram versus GPU Transformer
+timings describe practical execution cost, **not architecture-only speed**.
+
+### Generation and human review
+
+`config/evaluation_prompts.yaml` contains short original/general prompts; use
+`--prompts` for an explicitly chosen alternate file. Both models receive identical
+prompt text/WordPiece IDs, token limits, strategy and seed. Primary generation is
+greedy; sampling is secondary and is not expected to produce equivalent stochastic
+trajectories across models. The existing trigram generator retains its observed
+candidate/unigram fallback policy; it is not full-vocabulary Lidstone sampling.
+
+Transformer generation takes the last-position logits, stops at EOS or the configured
+token limit, and crops to the most recent context-length tokens at every step. Older
+history leaves attention; positions restart in the cropped window. No KV cache is
+implemented, so context is recomputed per token. PAD/BOS are excluded from Transformer
+generation and special tokens are hidden by canonical decoding. Continuation text
+does not include the original prompt. Generated-token counts exclude stopping EOS.
+Generation-only timing excludes loading and prompt tokenization and synchronizes CUDA
+around the loop. Small host/device synchronization for token selection is inherent
+in this simple implementation; these are not optimized production inference numbers.
+
+Each output includes prompt-token count, continuation IDs/text, token count, duration,
+throughput, EOS flag, strategy and seed. A human rubric provides blank ratings/notes
+for coherence, relevance, non-repetition, continuity, completeness and plausibility.
+The scale is 1 (poor)–5 (strong); no scores or subjective superiority are fabricated.
+There is no external LLM judge or automatic human-rating persistence.
+
+### CLI and Docker
+
+Local **development subset**, after canonical model artifacts exist:
+
+```bash
+python scripts/evaluate_models.py --help
+DEVICE=cpu python scripts/evaluate_models.py \
+  --test data/splits/test.jsonl --tokenizer models/tokenizer \
+  --trigram-model models/trigram --transformer-model models/transformer \
+  --config config/local.yaml --limit-documents 100 --output experiments/evaluation
+```
+
+Add `--dataset-manifest experiments/preprocessing/<run>.json` to verify historical
+split hashes. `--model trigram` or `--model transformer` evaluates only that artifact;
+default `both` requires both and does not silently downgrade. Local YAML defaults to
+100 documents; GPU YAML has no limit. `--full-test` explicitly removes a profile
+limit and cannot be combined with `--limit-documents`. Any configured limit is labeled
+**DEVELOPMENT SUBSET**, even if a tiny file happens to end before that limit.
+
+Future full evaluation, **reserved for Phase 9; not executed in Phase 8**:
+
+```bash
+DEVICE=cuda python scripts/evaluate_models.py \
+  --test data/splits/test.jsonl --tokenizer models/tokenizer \
+  --trigram-model models/trigram --transformer-model models/transformer \
+  --config config/gpu.yaml --output experiments/evaluation
+docker compose -f docker-compose.gpu.yml run --rm app \
+  python scripts/evaluate_models.py \
+  --test data/splits/test.jsonl --tokenizer models/tokenizer \
+  --trigram-model models/trigram --transformer-model models/transformer \
+  --config config/gpu.yaml --output experiments/evaluation
+```
+
+The existing GPU Docker service is `app`; its CUDA-wheel/host-driver/Container Toolkit
+requirements are unchanged. A fresh source distribution contains all evaluation
+logic and prompts. No new heavy dependency, notebook, local helper, or external
+service is required. CUDA evaluation must still be exercised on a real GPU server;
+CPU tests and synchronization mocks are not GPU runtime validation.
+
+### UI, exports, and failures
+
+Evaluation runs synchronously with a default of 10 documents and a hard UI cap of
+100, batch size at most four, generation at most 20 tokens per prompt, and small-model
+architecture checks. Long documents still cost time: use small data and the CLI for
+server jobs. No detached job manager exists. Comparison and Generate Text display
+completed runs, validity/provenance warnings, the metric table, relative values,
+factual interpretation, continuations and blank human-review rubric. JSON/CSV are
+downloadable. The recent-run viewer lists at most 20 summaries. Incomplete runs are
+not rendered as valid comparisons; final benchmark availability is never inferred
+from framework implementation.
+
+```text
+experiments/evaluation/<evaluation_id>/
+  resolved_config.json   environment.json   summary.json
+  trigram_metrics.json   transformer_metrics.json
+  generation_results.json   comparison.json   comparison.csv
+```
+
+Artifacts carry a common evaluation ID and reproducibility hashes. Config records
+the actual limit, generation settings, prompts and seed. CSV provides metric, both
+model values and unit, with identity columns. JSON includes metadata, missing-value
+reasons, relative comparisons and environment. Writes use same-directory staging and
+atomic per-file replacement. The unique run's `summary.json` is authoritative:
+`RUNNING`, `COMPLETED`, `FAILED_CONFIGURATION`, `FAILED_FINGERPRINT`,
+`FAILED_MODEL_LOAD`, `FAILED_EVALUATION`, or `INTERRUPTED`. Single-model metrics from
+an incomplete attempt are labeled partial. There is no whole-directory power-loss
+transaction; retain the summary and do not treat orphaned outputs as final results.
+
+Commit only source, configurations/prompts, tests and documentation under your own
+Git control. Do not commit the test split, tokenizer, SQLite model, Transformer
+weights/checkpoints, runtime evaluation/comparison CSV/JSON, generated continuations,
+training histories, final results, `.env`, or secrets. No Phase 9 experiment is
+automatically launched by Phase 8.
