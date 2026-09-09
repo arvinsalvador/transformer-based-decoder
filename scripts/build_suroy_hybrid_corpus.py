@@ -27,10 +27,37 @@ def iter_web(path):
                 yield r
 
 def iter_synthetic(path):
-    with Path(path).open(encoding="utf-8", newline="") as f:
-        for r in csv.DictReader(f):
-            if r.get("text"):
-                yield r
+    path = Path(path)
+
+    if path.is_dir():
+        files = sorted(path.glob("*.csv"))
+
+        if not files:
+            raise ValueError(
+                f"No CSV files found in synthetic corpus directory: {path}"
+            )
+
+        print(f"Synthetic corpus parts found: {len(files)}")
+
+        for csv_path in files:
+            print(f"Reading synthetic part: {csv_path}")
+
+            with csv_path.open(
+                encoding="utf-8",
+                newline=""
+            ) as f:
+                for row in csv.DictReader(f):
+                    if row.get("text"):
+                        yield row
+
+    else:
+        with path.open(
+            encoding="utf-8",
+            newline=""
+        ) as f:
+            for row in csv.DictReader(f):
+                if row.get("text"):
+                    yield row
 
 def main(argv=None):
     p = argparse.ArgumentParser()
