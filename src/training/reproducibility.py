@@ -51,16 +51,36 @@ def restore_rng(state):
         torch.cuda.set_rng_state_all([value.cpu() for value in state["cuda"]])
 
 
-def verify_inputs(train, validation, token_dir, settings, dataset_manifest=None):
+def verify_inputs(
+    train, validation, token_dir, settings, dataset_manifest=None, subset_manifest=None
+):
     """Never open test.jsonl. Bind resumes to actual train and validation bytes."""
     root = settings.paths["DATA_DIR"].resolve() / "splits"
+    if subset_manifest:
+        from src.experiments.subsets import verify_subset
+
+        subset = verify_subset(settings, train, subset_manifest)
+        special, fingerprints, warnings = verify_inputs(
+            root / "train.jsonl", validation, token_dir, settings, dataset_manifest
+        )
+        fingerprints.update(
+            parent_train_fingerprint=fingerprints["train_fingerprint"],
+            train_fingerprint=subset["subset_fingerprint"],
+            subset_fingerprint=subset["subset_fingerprint"],
+        )
+        return special, fingerprints, warnings
     for name, supplied in (("train", train), ("validation", validation)):
         if Path(supplied).resolve() != (root / f"{name}.jsonl").resolve():
             raise ValueError(f"Use canonical DATA_DIR/splits/{name}.jsonl")
     if Path(train).resolve() == Path(validation).resolve():
         raise ValueError("Train and validation must be distinct")
     directory = Path(token_dir).resolve()
-    if directory != (settings.paths["MODEL_DIR"] / "tokenizer").resolve():
+    if (
+        directory
+        != settings.paths.get(
+            "CANONICAL_TOKENIZER_DIR", settings.paths["MODEL_DIR"] / "tokenizer"
+        ).resolve()
+    ):
         raise ValueError("Use the canonical MODEL_DIR/tokenizer")
     manifest = json.loads((directory / "tokenizer_manifest.json").read_text(encoding="utf-8"))
     digest = file_hash(directory / "tokenizer.json")

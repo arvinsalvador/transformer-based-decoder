@@ -1,8 +1,9 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 8 — Shared evaluation and comparison.**
+University machine-learning homework. **Status: Phase 9 — Controlled experiment orchestration.**
 Ingestion, preprocessing, WordPiece, trigram scoring/generation, the custom Transformer,
-single-device training, and shared evaluation are implemented. Final experiments remain pending.
+single-device training, shared evaluation, and controlled orchestration are implemented.
+Actual final GPU experiments and Phase 10 reporting remain pending.
 
 ## Homework requirements
 
@@ -32,9 +33,10 @@ src/trigram/          WordPiece trigram counting, SQLite persistence, scoring an
 src/transformer/      Custom causal decoder model, factory and architecture inspection
 src/training/         Streaming causal sequences, training, precision, checkpoints and monitoring
 src/evaluation/       Shared read-only scoring, generation, comparison and artifact exports
+src/experiments/      Plan validation, preflight, nested subsets, stage gates and resume
 config/               local.yaml and gpu.yaml
-scripts/              Nine CLIs covering ingestion through shared model evaluation
-tests/                Phase 1–8 unit, integration, CLI and Streamlit regression tests
+scripts/              Ten CLIs covering ingestion through controlled experiments
+tests/                Phase 1–9 unit, integration, CLI and Streamlit regression tests
 data/raw/             Original TXT/CSV/DOCX/PDF sources; uploads stored in unique subdirectories
 data/processed/       Raw extracted JSONL; NOT cleaned text
 data/splits/          Canonical Phase 3 train/validation/test JSONL
@@ -1065,3 +1067,232 @@ Git control. Do not commit the test split, tokenizer, SQLite model, Transformer
 weights/checkpoints, runtime evaluation/comparison CSV/JSON, generated continuations,
 training histories, final results, `.env`, or secrets. No Phase 9 experiment is
 automatically launched by Phase 8.
+
+## Phase 9 controlled experiment orchestration
+
+Phase 9 coordinates the existing model services; it does not duplicate their learning
+algorithms. The final GPU experiment is **not automatically launched**. The Experiments
+page is inspection-only, and the CLI defaults to **plan only**. Production execution
+requires an explicit `--execute`; FULL additionally requires `--confirm-large-run`,
+even when FULL happens to be a small dataset.
+
+### Corpus cap and predeclared scales
+
+**100,000 is the maximum TOTAL clean corpus, not the training split.** With 100,000
+total documents and an 80/10/10 split, FULL training uses approximately **80,000**
+training documents, with approximately 10,000 validation and 10,000 test documents.
+This satisfies the homework requirement. No 100K-training scale is created.
+
+The source-controlled `config/experiments.yaml` declares 1K, 5K, 10K, 25K, 50K and
+FULL, subset seed, enabled models, evaluation, safety gates, a 25,000-document large-run
+threshold and a conservative 20 GB minimum free disk space. A scale larger than the
+actual train split becomes `NOT_APPLICABLE`, not duplicated or fabricated data. FULL
+means the actual canonical training file, including its existing order. Intermediate
+scales are optional; select one, several with repeated `--scale`, or `--all-scales`.
+Numeric scales must be ascending, unique, positive and below 100K; optional FULL is
+last. At least one model is required; shared evaluation requires both.
+
+Subsets are deterministic nested prefixes of training-document locators sorted by
+SHA-256 of `subset_seed:document_id`. If document ID is absent, the text SHA-256 is
+used; equal scores are broken by canonical line index. Memory holds scores/locators,
+not all document text. Selected records are written incrementally with normalized
+newline termination. The smaller subsets are nested in membership within FULL;
+FULL retains canonical order rather than being rewritten into rank order. Manifests
+record seed, requested/actual counts, selection policy, parent hash and subset-byte
+hash. Before use, the subset is independently checked against the deterministic
+canonical selection—not merely trusted because a manifest claims its hash.
+
+Validation and test files remain the same canonical files at every scale. Both models
+receive the exact same subset path and hash. Test data is counted/hashed for integrity
+but never supplies training targets, hyperparameters, early stopping or progression
+quality gates. Evaluation always requests the full fixed test split, overriding the
+local development document limit. Do not manually tune the predeclared plan from the
+resulting test metrics; any later tuning requires a separate methodology.
+
+The canonical WordPiece tokenizer is reused unchanged at every scale. Its vocabulary
+was fitted on the full canonical training corpus. This is therefore a **model-training
+scale study**, not a pure end-to-end tokenizer-plus-model learning curve. A narrow,
+explicit subset-provenance extension to Phase 5/7/8 APIs distinguishes parent fitting
+provenance from model-training subset identity; ordinary canonical-mode checks remain
+strict. Per-scale settings retain an explicit canonical-tokenizer path while isolating
+model/checkpoint output roots. No tokenizer manifest is rewritten to pretend it was
+trained on a smaller subset.
+
+### Plan and server preflight
+
+Plan mode scans canonical split records, verifies nonempty splits and the total cap,
+and checks a completed Phase 3 manifest against actual SHA-256 hashes. Recorded clean
+and split counts are also checked when available. Pass `--dataset-manifest` explicitly,
+or allow discovery of exactly one matching manifest beneath `experiments/preprocessing`.
+Missing/ambiguous/legacy manifests without all split hashes are rejected for controlled
+experiments; earlier standalone services retain their legacy-warning policies.
+
+Preflight adds canonical WordPiece fitting/hash checks, validated model/configuration,
+meta-device model construction/architecture inspection, actual device/precision checks,
+disk space and tiny writable probes. Meta construction avoids allocating full model
+weights and does not run forward/backward. Each output/checkpoint/model filesystem
+must meet the configured free-space minimum. Probe files are removed on exit. This
+threshold is a safety floor, **not a prediction of exact storage needs**.
+
+The explicit GPU profile requires CUDA and never falls back to CPU. OS, Python,
+PyTorch/CUDA, tokenizers, CPU/system RAM, GPU/VRAM and simple container detection are
+recorded. Preflight performs no model training and no training dry run. The separate
+`--dry-run-only` mode invokes Phase 7 forward/backward diagnostics without optimizer
+updates or exported weights. CPU local/synthetic development remains supported.
+
+Initial data/configuration failures can reject a request before an experiment directory
+is allocated. Once allocated, preflight failures are recorded as `PREFLIGHT_FAILED`.
+No missing data, malformed manifest, unavailable CUDA or failed write probe permits
+training to proceed.
+
+### Stage gates and isolation
+
+For each selected applicable scale, execution is sequential:
+
+```text
+verify subset and fixed inputs → trigram → Transformer dry run
+→ fresh Transformer training → shared evaluation → collect artifacts
+```
+
+A successful recorded dry run is reused on resume of that scale. Each new scale gets
+its own dry-run gate and fresh seeded Transformer initialization; no preceding scale's
+weights/checkpoints are carried forward. SQLite is selected consistently for controlled
+trigram runs. Architecture, epochs, optimizer, smoothing and seeds remain fixed across
+scales, while early stopping can naturally produce different actual training lengths.
+
+Technical failures stop progression: failed preflight/dry run, changed hashes, invalid
+artifacts/checkpoints, insufficient disk, OOM, nonfinite training, failed evaluation,
+or interruption. Disk is rechecked before every stage. The implementation intentionally
+requires sequential execution, stop-on-failure, dry-run gates and large-run confirmation;
+these policies cannot be disabled by setting their plan fields false. There is no
+`--continue-after-failure` escape hatch and no silent batch-size/LR/architecture retry.
+For OOM, inspect the recorded Phase 7 diagnostic, reduce resource demands in a **new
+plan/experiment**, and run preflight again. Poor Transformer test perplexity is an
+experimental finding, never a technical failure or a reason to cancel later scales.
+
+All stage outputs live beneath the unique experiment's scale directory. Global
+`models/trigram`, `models/transformer`, canonical splits and tokenizer artifacts are
+not replaced. No artifact promotion is performed in Phase 9.
+
+```text
+experiments/final/<experiment_id>/
+  experiment_plan.json   environment.json   preflight.json
+  status.json   subset_manifest.json   experiment.log
+  experiment_matrix.json   experiment_matrix.csv   summary.json
+  scales/<scale>/
+    status.json   scale_summary.json
+    subset/subset_manifest.json   subset/train.jsonl (not copied for FULL)
+    models/trigram/   models/transformer/
+    checkpoints/<training_run_id>/
+    training/<training_run_id>/
+    evaluation/<evaluation_id>/
+```
+
+The plan fingerprint covers resolved experiment/model/training/evaluation settings,
+runtime paths, canonical data identities and canonical tokenizer hash. Resume rejects
+incompatible changes; moving a run to different absolute roots is not transparently
+supported. Keep original roots or start an explicitly new experiment. A fresh source
+checkout contains every required API, configuration, prompt, dependency and CLI;
+runtime input/output files remain your responsibility, not hidden code dependencies.
+
+### Resume, statuses, and recovery
+
+Use `--resume <experiment_id>` under the same `--output` root. Valid completed stages
+are skipped only after their saved artifact hashes are rechecked. Completed trigram
+work is not repeated when Transformer is interrupted. The latest consistent Phase 7
+checkpoint resumes only its own scale; if interruption preceded any valid checkpoint,
+the incomplete scale's Transformer starts fresh. A completed training summary/export
+can be recovered when orchestration stopped before recording that completion. If only
+evaluation failed, retry evaluates the existing models without retraining them.
+
+Status writes use atomic same-directory replacement. Experiment states include
+`PLANNED`, `READY`, `RUNNING`, `COMPLETED`, `PARTIAL`, `PREFLIGHT_FAILED`, `FAILED`
+and `INTERRUPTED`; scale records also distinguish pending/not-applicable, stage work,
+OOM and nonfinite failures. `PARTIAL` can mean selected scales succeeded while other
+planned scales remain pending. A `failed_scale` additionally signals a technical
+failure and produces a nonzero CLI exit code. Ctrl+C preserves completed scales and
+lets the Phase 7 trainer save a consistent checkpoint when possible.
+
+An exclusive `.writer.lock` prevents concurrent writers to one experiment. A hard
+process kill may leave that lock; after verifying no process still owns the experiment,
+the user must remove that exact stale lock before resuming. The application never
+automatically removes an existing lock. Atomicity is per file, not a power-loss
+transaction over the complete artifact directory. Retain canonical inputs and prior
+valid checkpoints; do not edit runtime status/manifest files to bypass hash checks.
+
+Matrices record scale/requested/actual counts, subset hash, stage statuses, available
+training time/model size/parameters, NLL/perplexity, evaluation throughput and relative
+comparisons. Actual Transformer steps/tokens, allocator peak VRAM and final process RSS
+come from training summaries; final RSS is **not** mislabeled peak RAM. Missing historical
+peak RAM/VRAM remains null. Derived training throughput is labeled from measured tokens
+and recorded training duration. No speculative ETA or hardware-independent speed claim
+is generated. Full summary embeds the measured FULL comparison, corpus counts, plan,
+hardware and generation location with `primary_final_result: true` only after FULL
+comparison succeeds. Smaller scales remain supporting results. Final presentation and
+polished conclusions belong to Phase 10.
+
+### Exact server workflow (commands for later user execution)
+
+Run from the repository root. If automatic manifest discovery is ambiguous, add
+`--dataset-manifest experiments/preprocessing/<run>.json` to each command. None of the
+real training commands below is executed as an implementation check.
+
+```bash
+# 1. PLAN — also the default when no mode is supplied
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --plan
+# 2. PREFLIGHT — no forward/backward/training
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --preflight
+# 3. GPU DRY RUN — no optimizer update
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --dry-run-only
+# 4. Execute 1K, then inspect status/matrix
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --execute --scale 1000
+# Continue another scale within the SAME experiment, after inspection
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --execute --scale 5000 \
+  --resume <experiment_id>
+# FULL primary final run — explicit confirmation, user execution only
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --execute --full-only --confirm-large-run
+# Optional complete sweep — user execution only
+python scripts/run_experiments.py --config config/gpu.yaml \
+  --experiment-config config/experiments.yaml --execute --all-scales --confirm-large-run
+```
+
+To accumulate FULL into an existing experiment, append `--resume <experiment_id>`.
+Without resume, a new unique experiment is created. The plan/confirmation commands
+do not mean intermediate scales are mandatory before an explicitly selected FULL run.
+
+Docker uses the actual GPU service `app`; rebuild the image from current source first.
+The existing host NVIDIA driver/Container Toolkit requirements still apply. Prefix
+each corresponding command as follows:
+
+```bash
+docker compose -f docker-compose.gpu.yml build
+docker compose -f docker-compose.gpu.yml run --rm app python scripts/run_experiments.py \
+  --config config/gpu.yaml --experiment-config config/experiments.yaml --plan
+docker compose -f docker-compose.gpu.yml run --rm app python scripts/run_experiments.py \
+  --config config/gpu.yaml --experiment-config config/experiments.yaml --preflight
+docker compose -f docker-compose.gpu.yml run --rm app python scripts/run_experiments.py \
+  --config config/gpu.yaml --experiment-config config/experiments.yaml --dry-run-only
+docker compose -f docker-compose.gpu.yml run --rm app python scripts/run_experiments.py \
+  --config config/gpu.yaml --experiment-config config/experiments.yaml --execute --scale 1000
+docker compose -f docker-compose.gpu.yml run --rm app python scripts/run_experiments.py \
+  --config config/gpu.yaml --experiment-config config/experiments.yaml \
+  --execute --full-only --confirm-large-run
+```
+
+For long remote jobs, the user may use tmux/screen to keep the CLI attached; the
+application itself provides checkpoint/resume, not a remote job manager. Experiments
+UI displays plans, preflight/environment, registry and matrices without any training
+button. GPU execution must be verified on the actual server; CPU synthetic tests and
+mocked failure checks are not real CUDA validation.
+
+Commit source/configuration/tests/docs only under your own Git control. Do not commit
+generated subsets, datasets, tokenizer/model artifacts, SQLite databases, checkpoints,
+runtime status/environment snapshots, matrices, logs, generated continuations or final
+results. No actual 1K/5K/10K/25K/50K/FULL homework-scale run is performed during Phase 9
+implementation, and Phase 10 is not started.

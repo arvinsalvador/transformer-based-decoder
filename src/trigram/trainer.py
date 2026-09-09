@@ -60,8 +60,14 @@ def train(
     validation_path=None,
     dataset_fingerprint=None,
     overwrite=False,
+    subset_manifest=None,
 ):
     source, token_dir = Path(train_path).resolve(), Path(tokenizer_path).resolve()
+    subset = None
+    if subset_manifest:
+        from src.experiments.subsets import verify_subset
+
+        subset = verify_subset(settings, source, subset_manifest)
     if source.name != "train.jsonl":
         raise ValueError("Training requires canonical train.jsonl")
     target = Path(output_dir or settings.paths["MODEL_DIR"] / "trigram").resolve()
@@ -144,6 +150,11 @@ def train(
             "project_version": "0.5.0",
             "validation": validation,
         }
+        if subset:
+            manifest.update(
+                subset_fingerprint=subset["subset_fingerprint"],
+                parent_train_fingerprint=subset["parent_train_fingerprint"],
+            )
         (stage / ARTIFACTS[1]).write_text(
             json.dumps({"training": stats, "validation": validation}, indent=2), encoding="utf-8"
         )

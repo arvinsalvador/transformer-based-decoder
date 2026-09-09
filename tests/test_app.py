@@ -31,6 +31,8 @@ def test_dashboard_and_placeholders(monkeypatch):
             assert "Read-only evaluation" in app.info[0].value
         elif section in ("Comparison", "Generate Text"):
             assert "Shared comparison framework" in app.info[0].value
+        elif section == "Experiments":
+            assert "Inspection only" in app.info[0].value
         else:
             assert app.info[0].value == "Available in a later phase"
 

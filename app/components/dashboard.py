@@ -13,10 +13,10 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 8 · Shared evaluation and comparison")
+    st.caption("Phase 9 · Controlled experiment orchestration")
     st.info(
-        "Phases 1–8 are implemented. Phase 9 final experiments and "
-        "Phase 10 finalization remain pending."
+        "Phases 1–9 are implemented. Actual final GPU experiments and Phase 10 finalization "
+        "remain pending."
     )
     st.markdown(
         "Build a decoder-only Transformer with a **WordPiece tokenizer**, using **up to "

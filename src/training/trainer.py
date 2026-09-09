@@ -58,6 +58,7 @@ def run_training(
     overwrite_export=False,
     dataset_manifest=None,
     validation_batches=None,
+    subset_manifest=None,
 ):
     """Run bounded development or configured training. No test path is accepted.
 
@@ -128,7 +129,7 @@ def run_training(
         precision = select_precision(device, cfg["precision"], cfg["mixed_precision"])
         summary.update(device=info.selected_device, precision=precision)
         special, fingerprints, warnings = verify_inputs(
-            train_path, validation_path, tokenizer_path, settings, dataset_manifest
+            train_path, validation_path, tokenizer_path, settings, dataset_manifest, subset_manifest
         )
         if (
             not dry_run

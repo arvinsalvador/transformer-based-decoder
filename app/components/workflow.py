@@ -17,7 +17,7 @@ SECTIONS = {
     "Evaluation": "Shared test evaluation is implemented; final experiments remain pending.",
     "Comparison": "Measured comparisons and generation examples are implemented.",
     "Generate Text": "View paired continuations generated during shared evaluation.",
-    "Experiments": "Controlled experiments and reporting belong to Phases 9–10.",
+    "Experiments": "Controlled orchestration is implemented; inspect here and execute via CLI.",
 }
 
 

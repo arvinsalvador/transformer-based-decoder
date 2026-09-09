@@ -20,7 +20,7 @@ def read_json(path):
     return value
 
 
-def verify(settings, test, token_dir, manifests, dataset_manifest=None):
+def verify(settings, test, token_dir, manifests, dataset_manifest=None, subset_manifest=None):
     test, token_dir = Path(test).resolve(), Path(token_dir).resolve()
     if test != (settings.paths["DATA_DIR"] / "splits/test.jsonl").resolve():
         raise FingerprintError("Use canonical DATA_DIR/splits/test.jsonl")
@@ -29,7 +29,12 @@ def verify(settings, test, token_dir, manifests, dataset_manifest=None):
         for name in ("train", "validation")
     }:
         raise FingerprintError("Test must be distinct from train and validation")
-    if token_dir != (settings.paths["MODEL_DIR"] / "tokenizer").resolve():
+    if (
+        token_dir
+        != settings.paths.get(
+            "CANONICAL_TOKENIZER_DIR", settings.paths["MODEL_DIR"] / "tokenizer"
+        ).resolve()
+    ):
         raise FingerprintError("Use canonical MODEL_DIR/tokenizer")
     token_manifest = read_json(token_dir / "tokenizer_manifest.json")
     digest = file_hash(token_dir / "tokenizer.json")
@@ -59,8 +64,25 @@ def verify(settings, test, token_dir, manifests, dataset_manifest=None):
         if m.get("dataset_fingerprint")
         and m.get("dataset_fingerprint_source") != "train_validation_pair"
     }
+    subset = None
+    if subset_manifest:
+        from src.experiments.subsets import verify_subset
+
+        subset = verify_subset(settings, read_json(subset_manifest)["subset_path"], subset_manifest)
+        for manifest in manifests.values():
+            if (
+                manifest.get("subset_fingerprint") != subset["subset_fingerprint"]
+                or manifest.get("parent_train_fingerprint") != subset["parent_train_fingerprint"]
+                or (manifest.get("training_split_fingerprint") or manifest.get("train_fingerprint"))
+                != subset["subset_fingerprint"]
+            ):
+                raise FingerprintError("Models must share the verified training subset")
+    elif any(m.get("subset_fingerprint") for m in manifests.values()):
+        raise FingerprintError("Subset-trained models require their verified subset manifest")
     train_hashes = {
-        m.get("training_split_fingerprint") or m.get("train_fingerprint")
+        m.get("parent_train_fingerprint")
+        or m.get("training_split_fingerprint")
+        or m.get("train_fingerprint")
         for m in [token_manifest, *manifests.values()]
     }
     train_hashes.discard(None)
@@ -111,6 +133,7 @@ def verify(settings, test, token_dir, manifests, dataset_manifest=None):
             "test_dataset_path": str(test),
             "historical_test_verified": historical_test_verified,
             "warnings": warnings,
+            "subset_fingerprint": subset["subset_fingerprint"] if subset else None,
         },
     )
 

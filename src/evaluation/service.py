@@ -45,6 +45,7 @@ def evaluate_models(
     full_test=False,
     prompts_path=None,
     dataset_manifest=None,
+    subset_manifest=None,
 ):
     cfg = copy.deepcopy(settings.values["evaluation"])
     if limit_documents is not None:
@@ -92,7 +93,7 @@ def evaluate_models(
         manifests = {name: read_json(directories[name] / manifest_names[name]) for name in names}
         stage = "FAILED_FINGERPRINT"
         tokenizer, special, identity = verify(
-            settings, test, tokenizer_path, manifests, dataset_manifest
+            settings, test, tokenizer_path, manifests, dataset_manifest, subset_manifest
         )
         stage = "FAILED_MODEL_LOAD"
         watched = [
@@ -103,6 +104,8 @@ def evaluate_models(
         ]
         if dataset_manifest:
             watched.append(Path(dataset_manifest))
+        if subset_manifest:
+            watched.extend([Path(subset_manifest), Path(read_json(subset_manifest)["subset_path"])])
         watched += [
             directories[name] / file
             for name in names
