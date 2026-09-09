@@ -1,0 +1,31 @@
+source_id,url,source_type,region,category,allow_fetch,crawl_depth,max_pages
+DOT-CARAGA,https://www.tourism.gov.ph/destination/caraga/,official_tourism,Caraga,regional tourism,1,2,35
+DOT-SIARGAO,https://www.tourism.gov.ph/destination/caraga/siargao-island/,official_tourism,Siargao,destination guide,1,2,35
+DOT-SDN,https://www.tourism.gov.ph/destination/caraga/surigao-del-norte/,official_tourism,Surigao del Norte,destination guide,1,2,35
+DOT-SDS,https://www.tourism.gov.ph/destination/caraga/surigao-del-sur/,official_tourism,Surigao del Sur,destination guide,1,2,35
+SDN-MUNICIPALITIES,https://surigaodelnorte.gov.ph/city-municipalities/,provincial_government,Surigao del Norte,municipalities,1,3,120
+SURIGAO-CITY-TOURISM,https://www.surigaocity.gov.ph/ui/tourism,city_government,Surigao City,tourism,1,3,120
+SURIGAO-CDRRMO-TOURISM,https://surigaocitycdrrmo.com/tourism-sites/,city_government,Surigao City,tourism sites,1,2,35
+SDS-TOURISM,https://surigaodelsur.gov.ph/tourism/spotlight,provincial_government,Surigao del Sur,tourism,1,3,120
+VISIT-DELCARMEN,https://www.visitdelcarmen.com/,municipal_tourism,Del Carmen / Siargao,tourism,1,2,35
+SIARGAO-FINDER-BLOG,https://www.siargaofinder.com/blog,local_travel_guide,Siargao,blog,1,3,120
+DISCOVER-SIARGAO-TRAVEL,https://www.discoversiargao.com/travel-guide,local_travel_guide,Siargao,travel guides,1,3,120
+DISCOVER-SIARGAO-NEWS,https://www.discoversiargao.com/siargao-news/travel?start=0,local_travel_guide,Siargao,travel articles,1,2,35
+TRAVELA-SIARGAO,https://www.travelasiargao.com/stories/complete-siargao-travel-guide-first-timers,local_travel_guide,Siargao,first-timer guide,1,2,35
+KOBO-SIARGAO,https://www.koobo.ph/blogs/siargao-travel-guide-2026-everything-you-need-to-know-before-you-go,travel_guide,Siargao,travel guide,1,3,120
+KOBO-DELCARMEN,https://www.koobo.ph/siargao/travel/guides/del-carmen,travel_guide,Del Carmen / Siargao,travel guide,1,2,35
+SHUTTLE-SIARGAO-GUIDE,https://shuttlesiargao.com/blog/siargao-travel-guide-2026-complete-first-time-visitor/,local_business_guide,Siargao,travel guide,1,3,120
+SHUTTLE-SIARGAO-ACTIVITIES,https://shuttlesiargao.com/blog/what-to-do-in-siargao-top-activities/,local_business_guide,Siargao,activities,1,3,120
+SUROY-PH-SIARGAO,https://suroy.ph/siargao-travel-guide/,travel_guide,Siargao,travel guide,1,2,35
+HOTELS-PH-SIARGAO,https://hotels-philippines.com/blog/where-to-stay-in-siargao/,travel_guide,Siargao,accommodation areas,1,3,120
+MARIDEN-SIARGAO-ACTIVITIES,https://www.maridenresort.com/guides/things-to-do-in-siargao,resort_guide,Siargao,activities,1,2,35
+PINOY-ADVENTURISTA-SIARGAO,https://www.pinoyadventurista.com/2020/03/things-to-do-in-siargao-itinerary-philippines-travel-guide.html,travel_blog,Siargao,travel guide,1,2,35
+PHILIPPINE-BEACHES-SIARGAO,https://www.philippinebeaches.org/top-things-to-do-siargao-tourist-spots/,travel_guide,Siargao,activities,1,2,35
+TRIPZILLA-SURIGAO-CITY,https://www.tripzilla.ph/surigao-city-travel-guide/22686,travel_guide,Surigao City,travel guide,1,2,35
+MARIA-RONA-SDN,https://www.mariaronabeltran.com/2018/06/surigao-del-norte-travel-guide-sample.html,travel_blog,Surigao del Norte,travel guide,1,2,35
+PH-COMPASS-SOHOTON,https://www.philippinescompass.com/sohoton-cove-bucas-grande-complete-experience-guide/,travel_guide,Socorro / Bucas Grande,Sohoton guide,1,2,35
+FREEDOMWALL-SOHOTON,https://www.freedomwall.net/travel/sohoton-bay-bucas-grande-travel-guide/,travel_blog,Socorro / Bucas Grande,Sohoton guide,1,2,35
+TAKEYOURBACKPACK-BUCAS,https://www.takeyourbackpack.com/backpacking-in-philippines/visit-bucas-grande/,travel_guide,Socorro / Bucas Grande,travel guide,1,2,35
+PANA-SDS,https://pana.ph/guides/surigao,travel_guide,Surigao del Sur,travel guide,1,2,35
+PINOY-ADVENTURISTA-SDS,https://www.pinoyadventurista.com/2014/04/travel-guide-bislig-and-hinatuan-surigao-del-sur.html,travel_blog,Surigao del Sur,travel guide,1,3,120
+TRAVELLER-ROMBLON-SDS,https://atravellerfromromblon.wordpress.com/2023/02/12/top-3-must-visit-in-surigao-del-sur/,travel_blog,Surigao del Sur,travel guide,1,2,35

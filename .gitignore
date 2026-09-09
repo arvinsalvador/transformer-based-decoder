@@ -65,3 +65,4 @@ Desktop.ini
 # Allow curated source catalogs used by the application
 !resources/
 !resources/suroy_web_sources.csv
+!resources/suroy_web_sources_v3.csv
