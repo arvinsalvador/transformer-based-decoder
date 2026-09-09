@@ -1,0 +1,21 @@
+experiment:
+  name: suroy_real_final
+  subset_seed: 42
+
+  scales:
+    - 1000
+    - 2000
+    - full
+
+  run_trigram: true
+  run_transformer: true
+  evaluate_test: true
+
+  require_transformer_dry_run: true
+  stop_on_failure: true
+  sequential_models: true
+
+  large_run_threshold_documents: 25000
+  require_large_run_confirmation: true
+
+  minimum_free_disk_gb: 20
