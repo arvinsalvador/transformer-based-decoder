@@ -1,427 +1,166 @@
 #!/usr/bin/env python3
-"""
-Collect a real/public SUROY web corpus from a curated source catalog.
-
-Safety / methodology:
-- Public HTTP(S) pages only; no login, cookies, private groups, or Facebook scraping.
-- Honors robots.txt where available.
-- Same-domain crawling only from curated seeds.
-- Rate limited.
-- Stores source URL and provenance for every extracted document.
-- Exact normalized-text deduplication.
-- Does not attempt to bypass blocks, CAPTCHAs, paywalls, or access controls.
-
-Output:
-  data/external/suroy_web/web_documents.jsonl
-  data/external/suroy_web/source_results.csv
-  data/external/suroy_web/collection_manifest.json
-"""
 from __future__ import annotations
-
-import argparse
-import csv
-import hashlib
-import html
-import json
-import re
-import sys
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import urllib.robotparser
-from collections import defaultdict, deque
-from dataclasses import dataclass
-from datetime import datetime, timezone
+import argparse,csv,hashlib,html,json,re,sys,time
+import urllib.error,urllib.parse,urllib.request,urllib.robotparser
+from collections import defaultdict,deque
+from datetime import datetime,timezone
 from html.parser import HTMLParser
-from io import BytesIO
 from pathlib import Path
-
-USER_AGENT = "Project-SUROY-Academic-Corpus/1.0 (+non-commercial university homework)"
-REGION_TERMS = (
-    "siargao", "surigao", "general luna", "general-luna", "dapa", "del carmen",
-    "del-carmen", "pilar", "san isidro", "san-isidro", "santa monica",
-    "santa-monica", "burgos", "san benito", "san-benito", "socorro",
-    "bucas", "sohoton", "sugba", "cloud 9", "cloud-9", "magpupungko",
-    "pacifico", "cagwait", "hinatuan", "britania", "enchanted river",
-)
-TOURISM_TERMS = (
-    "tour", "tourism", "travel", "destination", "attraction", "beach", "surf",
-    "island", "lagoon", "cave", "falls", "river", "mangrove", "itinerary",
-    "hotel", "resort", "restaurant", "transport", "ferry", "airport",
-    "snorkel", "diving", "kayak", "visitor", "guide", "things to do",
-)
-SKIP_EXTENSIONS = (
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".mp3", ".zip",
-    ".rar", ".7z", ".exe", ".dmg", ".apk", ".css", ".js", ".xml", ".rss",
-)
-BLOCKED_HOST_FRAGMENTS = ("facebook.com", "m.facebook.com", "instagram.com", "tiktok.com")
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-def normalize_space(text: str) -> str:
-    return re.sub(r"\s+", " ", html.unescape(text)).strip()
-
-def normalized_key(text: str) -> str:
-    text = normalize_space(text).lower()
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-def host(url: str) -> str:
-    return urllib.parse.urlsplit(url).netloc.lower().split(":")[0]
-
-def canonical_url(url: str) -> str:
-    parts = urllib.parse.urlsplit(url)
-    scheme = parts.scheme.lower()
-    netloc = parts.netloc.lower()
-    path = re.sub(r"/+", "/", parts.path or "/")
-    if path != "/" and path.endswith("/"):
-        path = path[:-1]
-    # Strip tracking/fragment; preserve meaningful query parameters only for article URLs.
-    query = parts.query if ("view=article" in parts.query or "id=" in parts.query) else ""
-    return urllib.parse.urlunsplit((scheme, netloc, path, query, ""))
-
-def relevant_link(url: str, anchor: str) -> bool:
-    low = (urllib.parse.unquote(url) + " " + anchor).lower()
-    return any(t in low for t in REGION_TERMS) or (
-        "surigaodelnorte.gov.ph" in low and any(t in low for t in TOURISM_TERMS)
-    ) or (
-        "surigaodelsur.gov.ph/tourism" in low
-    ) or (
-        "siargaofinder.com/blog" in low
-    )
-
-class Extractor(HTMLParser):
-    """Conservative visible-text/link extractor without third-party dependencies."""
+USER_AGENT="Project-SUROY-Academic-Corpus/2.0"
+BLOCKED=("facebook.com","instagram.com","tiktok.com")
+SKIP=(".jpg",".jpeg",".png",".gif",".webp",".svg",".mp4",".mp3",".zip",".rar",".7z",".css",".js",".xml",".rss")
+BOILER=("cookie policy","privacy policy","all rights reserved","subscribe to our newsletter","elevating siargao business discovery with refined simplicity","your trusted local business directory for siargao island areas","send it to socials, chats, or copy the link","learn how your comment data is processed","affiliate note: some booking links are affiliate links")
+SECTIONS={
+"siargaofinder.com":("/blog",),"www.siargaofinder.com":("/blog",),
+"discoversiargao.com":("/travel-guide","/siargao-news/travel","/siargao-news/guide","/forum/destinations"),
+"www.discoversiargao.com":("/travel-guide","/siargao-news/travel","/siargao-news/guide","/forum/destinations"),
+"travelasiargao.com":("/stories",),"www.travelasiargao.com":("/stories",),
+"surigaodelnorte.gov.ph":("/",),"www.surigaodelnorte.gov.ph":("/",),
+"surigaodelsur.gov.ph":("/tourism",),"www.surigaodelsur.gov.ph":("/tourism",),
+"surigaocity.gov.ph":("/ui/tourism",),"www.surigaocity.gov.ph":("/ui/tourism",),
+"tourism.gov.ph":("/destination/caraga",),"www.tourism.gov.ph":("/destination/caraga",)
+}
+def now(): return datetime.now(timezone.utc).isoformat()
+def norm(t): return re.sub(r"\s+"," ",html.unescape(t)).strip()
+def key(t): return hashlib.sha256(norm(t).lower().encode()).hexdigest()
+def host(u): return urllib.parse.urlsplit(u).netloc.lower().split(":")[0]
+def canon(u):
+    p=urllib.parse.urlsplit(u); path=re.sub(r"/+","/",p.path or "/")
+    if path!="/" and path.endswith("/"): path=path[:-1]
+    q=p.query if any(x in p.query for x in ("view=article","id=","start=")) else ""
+    return urllib.parse.urlunsplit((p.scheme.lower(),p.netloc.lower(),path,q,""))
+def relevant(u,a):
+    h=host(u); path=urllib.parse.urlsplit(u).path.lower()
+    return any(path.startswith(x) for x in SECTIONS.get(h,()))
+class X(HTMLParser):
     def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.skip_depth = 0
-        self.capture_depth = 0
-        self.current = []
-        self.blocks = []
-        self.links = []
-        self.title_parts = []
-        self.in_title = False
-
-    def handle_starttag(self, tag, attrs):
-        tag = tag.lower()
-        if tag in ("script", "style", "noscript", "svg", "canvas", "form"):
-            self.skip_depth += 1
+        super().__init__(convert_charrefs=True); self.skip=0; self.depth=0; self.cur=[]; self.blocks=[]; self.links=[]; self.title=[]; self.intitle=False
+    def handle_starttag(self,t,attrs):
+        t=t.lower()
+        if t in ("script","style","noscript","svg","canvas","form"): self.skip+=1; return
+        if self.skip:return
+        if t=="title": self.intitle=True
+        if t in ("p","li","h1","h2","h3","h4","blockquote","td"):
+            self.depth+=1
+            if self.depth==1:self.cur=[]
+        if t=="a":
+            h=dict(attrs).get("href")
+            if h:self.links.append((h,""))
+    def handle_endtag(self,t):
+        t=t.lower()
+        if t in ("script","style","noscript","svg","canvas","form"):
+            if self.skip:self.skip-=1
             return
-        if self.skip_depth:
-            return
-        if tag == "title":
-            self.in_title = True
-        if tag in ("p", "li", "h1", "h2", "h3", "h4", "blockquote", "td"):
-            self.capture_depth += 1
-            if self.capture_depth == 1:
-                self.current = []
-        if tag == "a":
-            href = dict(attrs).get("href")
-            if href:
-                self.links.append((href, ""))
-
-    def handle_endtag(self, tag):
-        tag = tag.lower()
-        if tag in ("script", "style", "noscript", "svg", "canvas", "form"):
-            if self.skip_depth:
-                self.skip_depth -= 1
-            return
-        if self.skip_depth:
-            return
-        if tag == "title":
-            self.in_title = False
-        if tag in ("p", "li", "h1", "h2", "h3", "h4", "blockquote", "td") and self.capture_depth:
-            self.capture_depth -= 1
-            if self.capture_depth == 0:
-                text = normalize_space(" ".join(self.current))
-                if text:
-                    self.blocks.append(text)
-                self.current = []
-
-    def handle_data(self, data):
-        if self.skip_depth:
-            return
-        text = normalize_space(data)
-        if not text:
-            return
-        if self.in_title:
-            self.title_parts.append(text)
-        if self.capture_depth:
-            self.current.append(text)
+        if self.skip:return
+        if t=="title":self.intitle=False
+        if t in ("p","li","h1","h2","h3","h4","blockquote","td") and self.depth:
+            self.depth-=1
+            if self.depth==0:
+                s=norm(" ".join(self.cur))
+                if s:self.blocks.append(s)
+                self.cur=[]
+    def handle_data(self,d):
+        if self.skip:return
+        s=norm(d)
+        if not s:return
+        if self.intitle:self.title.append(s)
+        if self.depth:self.cur.append(s)
         if self.links:
-            href, anchor = self.links[-1]
-            # Best-effort anchor text accumulation for the most recent link.
-            self.links[-1] = (href, (anchor + " " + text).strip())
-
-@dataclass
-class RobotsCache:
-    parsers: dict
-    def __init__(self):
-        self.parsers = {}
-
-    def allowed(self, url: str) -> bool:
-        h = host(url)
-        if h not in self.parsers:
-            robots_url = f"{urllib.parse.urlsplit(url).scheme}://{h}/robots.txt"
-            rp = urllib.robotparser.RobotFileParser()
-            rp.set_url(robots_url)
+            h,a=self.links[-1]; self.links[-1]=(h,(a+" "+s).strip())
+class Robots:
+    def __init__(self):self.c={}
+    def ok(self,u):
+        h=host(u)
+        if h not in self.c:
+            rp=urllib.robotparser.RobotFileParser(); ru=f"{urllib.parse.urlsplit(u).scheme}://{h}/robots.txt"
             try:
-                req = urllib.request.Request(robots_url, headers={"User-Agent": USER_AGENT})
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    body = r.read(512_000).decode("utf-8", "replace")
-                rp.parse(body.splitlines())
-            except Exception:
-                # If robots.txt is unavailable, do not infer a prohibition.
-                rp = None
-            self.parsers[h] = rp
-        rp = self.parsers[h]
-        return True if rp is None else rp.can_fetch(USER_AGENT, url)
-
-def fetch(url: str, timeout: int, max_bytes: int) -> tuple[bytes, str]:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        ctype = response.headers.get_content_type()
-        data = response.read(max_bytes + 1)
-        if len(data) > max_bytes:
-            raise ValueError(f"response exceeds {max_bytes} bytes")
-        return data, ctype
-
-def quality_block(text: str, min_chars: int, max_chars: int) -> bool:
-    if not (min_chars <= len(text) <= max_chars):
-        return False
-    low = text.lower()
-    bad = (
-        "cookie policy", "privacy policy", "all rights reserved", "javascript is disabled",
-        "subscribe to our newsletter", "accept cookies", "skip to content",
-    )
-    if any(x in low for x in bad) and len(text) < 500:
-        return False
-    letters = sum(ch.isalpha() for ch in text)
-    return letters / max(1, len(text)) >= 0.45
-
-def chunk_blocks(blocks: list[str], min_chars: int, target_chars: int, max_chars: int) -> list[str]:
-    chunks, cur, size = [], [], 0
-    for block in blocks:
-        block = normalize_space(block)
-        if not quality_block(block, 40, max_chars):
-            continue
-        if cur and size + len(block) + 1 > target_chars:
-            text = normalize_space(" ".join(cur))
-            if len(text) >= min_chars:
-                chunks.append(text[:max_chars])
-            cur, size = [], 0
-        cur.append(block)
-        size += len(block) + 1
+                req=urllib.request.Request(ru,headers={"User-Agent":USER_AGENT})
+                with urllib.request.urlopen(req,timeout=10) as r: rp.parse(r.read(512000).decode("utf-8","replace").splitlines())
+            except Exception: rp=None
+            self.c[h]=rp
+        return True if self.c[h] is None else self.c[h].can_fetch(USER_AGENT,u)
+def useful(s,maxc):
+    if not 40<=len(s)<=maxc:return False
+    low=s.lower()
+    if any(x in low for x in BOILER):return False
+    return sum(c.isalpha() for c in s)/max(1,len(s))>=.45
+def chunks(blocks,minc,target,maxc):
+    out=[];cur=[];n=0
+    for b in blocks:
+        b=norm(b)
+        if not useful(b,maxc):continue
+        if cur and n+len(b)+1>target:
+            s=norm(" ".join(cur))
+            if len(s)>=minc:out.append(s[:maxc])
+            cur=[];n=0
+        cur.append(b);n+=len(b)+1
     if cur:
-        text = normalize_space(" ".join(cur))
-        if len(text) >= min_chars:
-            chunks.append(text[:max_chars])
-    return chunks
-
-def extract_html(data: bytes, base_url: str, min_chars: int, target_chars: int, max_chars: int):
-    text = data.decode("utf-8", "replace")
-    parser = Extractor()
-    parser.feed(text)
-    title = normalize_space(" ".join(parser.title_parts))[:300]
-    chunks = chunk_blocks(parser.blocks, min_chars, target_chars, max_chars)
-    links = []
-    for href, anchor in parser.links:
-        try:
-            absolute = canonical_url(urllib.parse.urljoin(base_url, href))
-            if absolute.startswith(("http://", "https://")):
-                links.append((absolute, normalize_space(anchor)[:300]))
-        except Exception:
-            continue
-    return title, chunks, links
-
-def extract_pdf(data: bytes, min_chars: int, target_chars: int, max_chars: int):
-    try:
+        s=norm(" ".join(cur))
+        if len(s)>=minc:out.append(s[:maxc])
+    return out
+def fetch(u,timeout,maxb):
+    req=urllib.request.Request(u,headers={"User-Agent":USER_AGENT,"Accept":"text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5"})
+    with urllib.request.urlopen(req,timeout=timeout) as r:
+        ct=r.headers.get_content_type(); data=r.read(maxb+1)
+        if len(data)>maxb: raise ValueError("response too large")
+        return data,ct
+def extract(data,u,minc,target,maxc,ct):
+    if ct=="application/pdf" or u.lower().endswith(".pdf"):
         import fitz
-    except ImportError as exc:
-        raise RuntimeError("PyMuPDF is required for PDF extraction") from exc
-    doc = fitz.open(stream=data, filetype="pdf")
-    blocks = []
-    for page in doc:
-        txt = normalize_space(page.get_text("text"))
-        if txt:
-            blocks.append(txt)
-    return "", chunk_blocks(blocks, min_chars, target_chars, max_chars), []
-
-def read_sources(path: Path):
-    with path.open(encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            if row.get("allow_fetch", "1").strip() not in ("1", "true", "TRUE", "yes"):
-                continue
-            yield {
-                **row,
-                "crawl_depth": int(row.get("crawl_depth") or 0),
-                "max_pages": int(row.get("max_pages") or 1),
-            }
-
-def main(argv=None) -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--sources", default="resources/suroy_web_sources.csv")
-    p.add_argument("--output-dir", default="data/external/suroy_web")
-    p.add_argument("--max-total-pages", type=int, default=300)
-    p.add_argument("--timeout", type=int, default=20)
-    p.add_argument("--delay", type=float, default=1.25)
-    p.add_argument("--max-bytes", type=int, default=8_000_000)
-    p.add_argument("--min-chars", type=int, default=250)
-    p.add_argument("--target-chars", type=int, default=1400)
-    p.add_argument("--max-chars", type=int, default=3000)
-    p.add_argument("--overwrite", action="store_true")
-    args = p.parse_args(argv)
-
-    sources_path = Path(args.sources)
-    outdir = Path(args.output_dir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    docs_path = outdir / "web_documents.jsonl"
-    results_path = outdir / "source_results.csv"
-    manifest_path = outdir / "collection_manifest.json"
-    if not args.overwrite and any(x.exists() for x in (docs_path, results_path, manifest_path)):
-        print("Output exists. Use --overwrite only when intentionally rebuilding.", file=sys.stderr)
-        return 2
-
-    seeds = list(read_sources(sources_path))
-    robots = RobotsCache()
-    visited = set()
-    seen_text = set()
-    host_last_fetch = defaultdict(float)
-    host_counts = defaultdict(int)
-    result_rows = []
-    total_pages = total_docs = failures = robots_skips = 0
-    started = utc_now()
-
-    queue = deque()
-    seed_meta = {}
-    for seed in seeds:
-        u = canonical_url(seed["url"])
-        queue.append((u, 0, seed["source_id"]))
-        seed_meta[seed["source_id"]] = seed
-
-    with docs_path.open("w", encoding="utf-8", newline="\n") as sink:
-        while queue and total_pages < args.max_total_pages:
-            url, depth, source_id = queue.popleft()
-            url = canonical_url(url)
-            if url in visited:
-                continue
-            visited.add(url)
-            meta = seed_meta[source_id]
-            h = host(url)
-            if any(x in h for x in BLOCKED_HOST_FRAGMENTS):
-                continue
-            if urllib.parse.urlsplit(url).path.lower().endswith(SKIP_EXTENSIONS):
-                continue
-            if host_counts[h] >= meta["max_pages"]:
-                continue
-            if not robots.allowed(url):
-                robots_skips += 1
-                result_rows.append([source_id, url, "ROBOTS_SKIPPED", 0, 0, ""])
-                continue
-
-            wait = args.delay - (time.time() - host_last_fetch[h])
-            if wait > 0:
-                time.sleep(wait)
+        d=fitz.open(stream=data,filetype="pdf")
+        b=[norm(p.get_text("text")) for p in d if norm(p.get_text("text"))]
+        return "",chunks(b,minc,target,maxc),[]
+    p=X();p.feed(data.decode("utf-8","replace"))
+    links=[]
+    for href,a in p.links:
+        try:
+            x=canon(urllib.parse.urljoin(u,href))
+            if x.startswith(("http://","https://")):links.append((x,norm(a)[:300]))
+        except:pass
+    return norm(" ".join(p.title))[:300],chunks(p.blocks,minc,target,maxc),links
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--sources",default="resources/suroy_web_sources.csv"); ap.add_argument("--output-dir",default="data/external/suroy_web_v2")
+    ap.add_argument("--max-total-pages",type=int,default=800); ap.add_argument("--target-chars",type=int,default=800)
+    ap.add_argument("--min-chars",type=int,default=220); ap.add_argument("--max-chars",type=int,default=1800)
+    ap.add_argument("--delay",type=float,default=1.0); ap.add_argument("--timeout",type=int,default=20); ap.add_argument("--max-bytes",type=int,default=8000000); ap.add_argument("--overwrite",action="store_true")
+    a=ap.parse_args(); out=Path(a.output_dir); out.mkdir(parents=True,exist_ok=True)
+    docs=out/"web_documents.jsonl"; res=out/"source_results.csv"; man=out/"collection_manifest.json"
+    if not a.overwrite and any(p.exists() for p in (docs,res,man)): raise SystemExit("output exists; use --overwrite")
+    with Path(a.sources).open(encoding="utf-8",newline="") as f:
+        seeds=[r for r in csv.DictReader(f) if r.get("allow_fetch","1") in ("1","true","TRUE","yes")]
+    for r in seeds: r["crawl_depth"]=int(r["crawl_depth"]); r["max_pages"]=int(r["max_pages"])
+    meta={r["source_id"]:r for r in seeds}; q=deque((canon(r["url"]),0,r["source_id"]) for r in seeds)
+    visited=set(); seen=set(); robots=Robots(); last=defaultdict(float); scount=defaultdict(int)
+    rows=[]; pages=docs_n=fail=robots_n=0; started=now()
+    with docs.open("w",encoding="utf-8") as sink:
+        while q and pages<a.max_total_pages:
+            u,d,sid=q.popleft(); u=canon(u); s=meta[sid]
+            if u in visited or scount[sid]>=s["max_pages"]:continue
+            h=host(u)
+            if any(x in h for x in BLOCKED) or urllib.parse.urlsplit(u).path.lower().endswith(SKIP):continue
+            visited.add(u)
+            if not robots.ok(u): robots_n+=1; rows.append([sid,u,"ROBOTS_SKIPPED",0,0,""]); continue
+            wait=a.delay-(time.time()-last[h])
+            if wait>0:time.sleep(wait)
             try:
-                data, ctype = fetch(url, args.timeout, args.max_bytes)
-                host_last_fetch[h] = time.time()
-                host_counts[h] += 1
-                total_pages += 1
-                if ctype == "application/pdf" or url.lower().endswith(".pdf"):
-                    title, chunks, links = extract_pdf(
-                        data, args.min_chars, args.target_chars, args.max_chars
-                    )
-                elif "html" in ctype or ctype in ("text/plain", "application/xhtml+xml"):
-                    title, chunks, links = extract_html(
-                        data, url, args.min_chars, args.target_chars, args.max_chars
-                    )
-                else:
-                    result_rows.append([source_id, url, "UNSUPPORTED_TYPE", 0, len(data), ctype])
-                    continue
-
-                emitted = 0
-                for idx, text in enumerate(chunks, 1):
-                    key = normalized_key(text)
-                    if key in seen_text:
-                        continue
-                    seen_text.add(key)
-                    total_docs += 1
-                    emitted += 1
-                    record = {
-                        "document_id": f"WEB-{total_docs:07d}",
-                        "text": text,
-                        "source_id": source_id,
-                        "source_url": url,
-                        "source_domain": h,
-                        "source_title": title,
-                        "source_type": meta["source_type"],
-                        "region": meta["region"],
-                        "category": meta["category"],
-                        "provenance_type": "real_public_web",
-                        "synthetic": False,
-                        "retrieved_at": utc_now(),
-                        "chunk_index": idx,
-                        "text_sha256": key,
-                    }
-                    sink.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-                result_rows.append([source_id, url, "SUCCESS", emitted, len(data), ctype])
-
-                if depth < meta["crawl_depth"]:
-                    for candidate, anchor in links:
-                        if host(candidate) != h:
-                            continue
-                        if candidate in visited:
-                            continue
-                        if relevant_link(candidate, anchor):
-                            queue.append((candidate, depth + 1, source_id))
-            except urllib.error.HTTPError as exc:
-                failures += 1
-                result_rows.append([source_id, url, f"HTTP_{exc.code}", 0, 0, ""])
-            except Exception as exc:
-                failures += 1
-                result_rows.append([source_id, url, f"FAILED_{type(exc).__name__}", 0, 0, str(exc)[:180]])
-
-            if total_pages and total_pages % 10 == 0:
-                print(f"Pages: {total_pages} | Documents: {total_docs} | Queue: {len(queue)}", flush=True)
-
-    with results_path.open("w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["source_id","url","status","documents_emitted","bytes","detail"])
-        w.writerows(result_rows)
-
-    manifest = {
-        "state": "completed",
-        "started_at": started,
-        "completed_at": utc_now(),
-        "source_catalog": str(sources_path.resolve()),
-        "seed_sources": len(seeds),
-        "pages_fetched": total_pages,
-        "documents_emitted": total_docs,
-        "unique_text_hashes": len(seen_text),
-        "fetch_failures": failures,
-        "robots_skips": robots_skips,
-        "max_total_pages": args.max_total_pages,
-        "methodology": {
-            "public_pages_only": True,
-            "robots_respected": True,
-            "facebook_automated_scraping": False,
-            "same_domain_crawl": True,
-            "rate_limit_seconds_per_host": args.delay,
-            "exact_deduplication": "normalized SHA-256",
-        },
-        "output": str(docs_path.resolve()),
-    }
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(json.dumps(manifest, indent=2))
-    return 0
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+                data,ct=fetch(u,a.timeout,a.max_bytes); last[h]=time.time(); scount[sid]+=1; pages+=1
+                title,chs,links=extract(data,u,a.min_chars,a.target_chars,a.max_chars,ct)
+                n=0
+                for i,t in enumerate(chs,1):
+                    k=key(t)
+                    if k in seen:continue
+                    seen.add(k); docs_n+=1; n+=1
+                    sink.write(json.dumps({"document_id":f"WEB2-{docs_n:07d}","text":t,"source_id":sid,"source_url":u,"source_domain":h,"source_title":title,"source_type":s["source_type"],"region":s["region"],"category":s["category"],"provenance_type":"real_public_web","synthetic":False,"retrieved_at":now(),"chunk_index":i,"text_sha256":k},ensure_ascii=False)+"\n")
+                rows.append([sid,u,"SUCCESS",n,len(data),ct])
+                if d<s["crawl_depth"]:
+                    for x,anchor in links:
+                        if host(x)==h and x not in visited and relevant(x,anchor): q.append((x,d+1,sid))
+            except urllib.error.HTTPError as e: fail+=1; rows.append([sid,u,f"HTTP_{e.code}",0,0,""])
+            except Exception as e: fail+=1; rows.append([sid,u,f"FAILED_{type(e).__name__}",0,0,str(e)[:180]])
+            if pages and pages%25==0: print(f"Pages: {pages} | Documents: {docs_n} | Queue: {len(q)}",flush=True)
+    with res.open("w",encoding="utf-8",newline="") as f:
+        w=csv.writer(f); w.writerow(["source_id","url","status","documents_emitted","bytes","detail"]); w.writerows(rows)
+    m={"state":"completed","collector_version":2,"started_at":started,"completed_at":now(),"seed_sources":len(seeds),"pages_fetched":pages,"documents_emitted":docs_n,"unique_text_hashes":len(seen),"fetch_failures":fail,"robots_skips":robots_n,"max_total_pages":a.max_total_pages,"chunk_target_chars":a.target_chars,"source_page_counts":dict(scount),"methodology":{"public_pages_only":True,"robots_respected":True,"facebook_automated_scraping":False,"rate_limit_seconds_per_host":a.delay,"exact_deduplication":"normalized SHA-256"},"output":str(docs.resolve())}
+    man.write_text(json.dumps(m,indent=2),encoding="utf-8"); print(json.dumps(m,indent=2))
+if __name__=="__main__": main()
