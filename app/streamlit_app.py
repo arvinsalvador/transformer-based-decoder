@@ -7,16 +7,17 @@ from app.components.documents import render_documents
 from app.components.evaluation import render_comparison, render_evaluation
 from app.components.experiments import render_experiments
 from app.components.preprocessing import render_preprocessing
+from app.components.results import render_final_results
 from app.components.tokenizer import render_tokenizer
 from app.components.training import render_training
 from app.components.transformer import render_transformer
 from app.components.trigram import render_trigram
-from app.components.workflow import SECTIONS, render_placeholder
+from app.components.workflow import SECTIONS
 from src.config.settings import ConfigurationError, load_settings
 
-st.set_page_config(page_title="Decoder LM · Phase 9", page_icon="📚", layout="wide")
+st.set_page_config(page_title="Decoder LM · Final system", page_icon="📚", layout="wide")
 st.sidebar.title("Decoder LM")
-st.sidebar.caption("University ML project · Phase 9")
+st.sidebar.caption("University ML project · Implementation and execution evidence")
 section = st.sidebar.radio("Workspace", ["Dashboard", *SECTIONS])
 try:
     settings = load_settings()
@@ -44,5 +45,7 @@ elif section in ("Comparison", "Generate Text"):
     render_comparison(settings)
 elif section == "Experiments":
     render_experiments(settings)
+elif section == "Final Results":
+    render_final_results(settings)
 else:
-    render_placeholder(section)
+    st.error("Unknown workflow section")

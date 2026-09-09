@@ -5,6 +5,13 @@
 !requirements-dev.txt
 !pyproject.toml
 !README.md
+!.gitignore
+!.dockerignore
+!Makefile
+!docker-compose.yml
+!docker-compose.gpu.yml
+!docs/
+!docs/*.md
 !app/
 !app/**/*.py
 !src/

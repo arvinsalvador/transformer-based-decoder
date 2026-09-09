@@ -5,6 +5,7 @@ from dataclasses import asdict
 import psutil
 import streamlit as st
 
+from app.components.results import report_preview
 from src.config.settings import Settings
 from src.utils.device import DeviceUnavailableError, detect_device
 
@@ -13,11 +14,27 @@ def render_dashboard(settings: Settings) -> None:
     """Render configuration and hardware without loading any dataset or model."""
     config = settings.values
     st.title("Transformer-Based Decoder-Only Language Model")
-    st.caption("Phase 9 · Controlled experiment orchestration")
+    st.caption("Final system · Implementation status is separate from experiment status")
     st.info(
-        "Phases 1–9 are implemented. Actual final GPU experiments and Phase 10 finalization "
-        "remain pending."
+        "Implementation phases 1–10 are available. Final experiment completion requires "
+        "validated FULL artifacts, not source-code presence."
     )
+    try:
+        report = report_preview(settings)
+        if report:
+            st.write(report["project_status"])
+            st.caption(f"Saved audit: {report['generated_at']} — not a live artifact rescan.")
+            st.dataframe(report["compliance"], hide_index=True)
+            if report["audit_status"] == "FAIL":
+                st.error("Saved final audit failed; inspect Final Results.")
+            elif report["final"]["status"] == "PASS":
+                st.dataframe(report["comparison_table"], hide_index=True)
+            else:
+                st.warning("FINAL EXPERIMENT NOT YET EXECUTED or not validated.")
+        else:
+            st.warning("FINAL EXPERIMENT NOT YET EXECUTED or readiness report not generated.")
+    except (OSError, ValueError, KeyError) as exc:
+        st.error(f"Saved report unavailable: {exc}")
     st.markdown(
         "Build a decoder-only Transformer with a **WordPiece tokenizer**, using **up to "
         "100,000 documents**. Compare performance and training time with a trigram language model."

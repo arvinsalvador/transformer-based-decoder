@@ -1,9 +1,45 @@
 # Transformer-Based Decoder-Only Language Model
 
-University machine-learning homework. **Status: Phase 9 — Controlled experiment orchestration.**
+University machine-learning homework. **Phase 10 — final audit and reporting.**
 Ingestion, preprocessing, WordPiece, trigram scoring/generation, the custom Transformer,
 single-device training, shared evaluation, and controlled orchestration are implemented.
-Actual final GPU experiments and Phase 10 reporting remain pending.
+Final auditing, reporting and presentation views are implemented. Actual final GPU
+experiments remain pending: **IMPLEMENTATION_COMPLETE_EXPERIMENT_PENDING**.
+Source implementation is not evidence that final training has run.
+
+## Final audit and execution
+
+Generate a pre-training readiness report without training:
+
+```bash
+python scripts/generate_final_report.py --config config/gpu.yaml --readiness-only --output reports
+```
+
+After a completed FULL experiment, replace the ID with its recorded identifier:
+
+```bash
+python scripts/generate_final_report.py --config config/gpu.yaml --experiment ACTUAL_EXPERIMENT_ID --output reports
+```
+
+Reports include `system_audit.json`, `final_summary.json`, `final_comparison.csv`,
+`final_report.md` and standalone `final_report.html`. All are ignored runtime outputs.
+Missing final artifacts produce **FINAL EXPERIMENT NOT YET EXECUTED**, not fabricated
+metrics. Invalid FULL artifacts fail integrity validation; smaller scales never replace
+FULL. `--latest-complete` selects by recorded completion/update time, not performance,
+and fails if that candidate is invalid. Explicit experiment selection is preferred.
+
+The Dashboard and Final Results page read a saved audit snapshot, not live model/data
+integrity. Regenerate reports after artifacts change. Presentation view retains scientific
+warnings. Static code-policy checks cannot prove unseen manual test-set tuning decisions.
+
+See [GPU runbook](docs/GPU_RUNBOOK.md), [GPU checklist](docs/GPU_SERVER_CHECKLIST.md),
+[submission checklist](docs/SUBMISSION_CHECKLIST.md),
+[reproducibility](docs/REPRODUCIBILITY.md), [methodology](docs/METHODOLOGY.md), and
+[architecture](docs/ARCHITECTURE.md). The runbook gives the complete inspected CLI
+sequence, including explicit FULL authorization and evaluation recovery. No expensive
+training starts from reporting. The corpus limit applies to **train + validation + test**.
+
+The phase-numbered sections below document implemented subsystems, not pending phases.
 
 ## Homework requirements
 
@@ -34,9 +70,10 @@ src/transformer/      Custom causal decoder model, factory and architecture insp
 src/training/         Streaming causal sequences, training, precision, checkpoints and monitoring
 src/evaluation/       Shared read-only scoring, generation, comparison and artifact exports
 src/experiments/      Plan validation, preflight, nested subsets, stage gates and resume
+src/reporting/        Source/runtime audit, FULL validation, final tables and report exports
 config/               local.yaml and gpu.yaml
-scripts/              Ten CLIs covering ingestion through controlled experiments
-tests/                Phase 1–9 unit, integration, CLI and Streamlit regression tests
+scripts/              Eleven CLIs covering ingestion through final reporting
+tests/                Phase 1–10 unit, integration, CLI and Streamlit regression tests
 data/raw/             Original TXT/CSV/DOCX/PDF sources; uploads stored in unique subdirectories
 data/processed/       Raw extracted JSONL; NOT cleaned text
 data/splits/          Canonical Phase 3 train/validation/test JSONL
@@ -1229,7 +1266,7 @@ and recorded training duration. No speculative ETA or hardware-independent speed
 is generated. Full summary embeds the measured FULL comparison, corpus counts, plan,
 hardware and generation location with `primary_final_result: true` only after FULL
 comparison succeeds. Smaller scales remain supporting results. Final presentation and
-polished conclusions belong to Phase 10.
+audited conclusions are provided by the final reporting subsystem.
 
 ### Exact server workflow (commands for later user execution)
 
@@ -1294,5 +1331,5 @@ mocked failure checks are not real CUDA validation.
 Commit source/configuration/tests/docs only under your own Git control. Do not commit
 generated subsets, datasets, tokenizer/model artifacts, SQLite databases, checkpoints,
 runtime status/environment snapshots, matrices, logs, generated continuations or final
-results. No actual 1K/5K/10K/25K/50K/FULL homework-scale run is performed during Phase 9
-implementation, and Phase 10 is not started.
+results. No actual 1K/5K/10K/25K/50K/FULL homework-scale run is performed during
+implementation; only synthetic tests are run. Use final reporting after GPU execution.

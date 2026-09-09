@@ -14,6 +14,8 @@ COPY app ./app
 COPY src ./src
 COPY config ./config
 COPY scripts ./scripts
+COPY docs ./docs
+COPY Dockerfile requirements-dev.txt pyproject.toml README.md Makefile .gitignore .dockerignore docker-compose.yml docker-compose.gpu.yml ./
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=3)"

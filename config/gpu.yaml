@@ -14,7 +14,8 @@ random_seed: 42
 dataset:
   max_documents: 100000
   working_document_limit: 100000
-  max_file_size_mb: 100
+  # Supplied SUROY CSV is ~118 MiB; document cap remains 100,000.
+  max_file_size_mb: 128
   min_extracted_characters: 20
   recursive: true
 ingestion:

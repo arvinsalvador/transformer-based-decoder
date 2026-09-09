@@ -19,6 +19,10 @@
 /runs/
 *.pt
 *.pth
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 *.ckpt
 *.safetensors
 *.onnx

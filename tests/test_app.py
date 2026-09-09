@@ -6,7 +6,7 @@ from src.config.settings import PROJECT_ROOT
 from src.utils import device
 
 
-def test_dashboard_and_placeholders(monkeypatch):
+def test_dashboard_and_all_implemented_pages(monkeypatch):
     monkeypatch.setenv("CONFIG_PATH", "config/local.yaml")
     monkeypatch.setenv("DEVICE", "cpu")
     app = AppTest.from_file(str(PROJECT_ROOT / "app/streamlit_app.py")).run(timeout=30)
@@ -17,6 +17,8 @@ def test_dashboard_and_placeholders(monkeypatch):
         assert not app.exception
         if section == "Documents":
             assert "Large datasets" in app.info[0].value
+        elif section == "Final Results":
+            assert "FULL is the primary" in app.info[0].value
         elif section == "Preprocessing":
             assert "large corpora" in app.info[0].value
         elif section == "Tokenizer":
@@ -34,7 +36,7 @@ def test_dashboard_and_placeholders(monkeypatch):
         elif section == "Experiments":
             assert "Inspection only" in app.info[0].value
         else:
-            assert app.info[0].value == "Available in a later phase"
+            raise AssertionError(f"Unvalidated navigation section: {section}")
 
 
 def test_gpu_profile_warning(monkeypatch):
