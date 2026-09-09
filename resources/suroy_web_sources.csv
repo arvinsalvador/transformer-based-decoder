@@ -1,0 +1,33 @@
+source_id,url,source_type,region,category,allow_fetch,crawl_depth,max_pages
+DOT-CARAGA,https://www.tourism.gov.ph/destination/caraga/,official_tourism,Caraga,regional tourism overview,1,1,30
+DOT-SIARGAO,https://www.tourism.gov.ph/destination/caraga/siargao-island/,official_tourism,Siargao,destination guide,1,1,20
+DOT-SDN,https://www.tourism.gov.ph/destination/caraga/surigao-del-norte/,official_tourism,Surigao del Norte,destination guide,1,1,20
+DOT-SDS,https://www.tourism.gov.ph/destination/caraga/surigao-del-sur/,official_tourism,Surigao del Sur,destination guide,1,1,20
+SDN-ISLANDS,https://surigaodelnorte.gov.ph/island-destination/,provincial_government,Siargao,island attractions,1,1,30
+SDN-GL,https://surigaodelnorte.gov.ph/general-luna/,provincial_government,General Luna,municipality and attractions,1,1,20
+SDN-DAPA,https://surigaodelnorte.gov.ph/dapa/,provincial_government,Dapa,municipality,1,1,20
+SDN-DELCARMEN,https://surigaodelnorte.gov.ph/del-carmen/,provincial_government,Del Carmen,municipality,1,1,20
+SDN-PILAR,https://surigaodelnorte.gov.ph/pilar/,provincial_government,Pilar,municipality and attractions,1,1,20
+SDN-SANISIDRO,https://surigaodelnorte.gov.ph/san-isidro/,provincial_government,San Isidro,municipality,1,1,20
+SDN-SANTAMONICA,https://surigaodelnorte.gov.ph/santa-monica/,provincial_government,Santa Monica,municipality and attractions,1,1,20
+SDN-SANBENITO,https://surigaodelnorte.gov.ph/san-benito/,provincial_government,San Benito,municipality and attractions,1,1,20
+SDN-BURGOS,https://surigaodelnorte.gov.ph/burgos/,provincial_government,Burgos,municipality and attractions,1,1,20
+SDN-SOCORRO,https://surigaodelnorte.gov.ph/socorro/,provincial_government,Socorro / Bucas Grande,municipality and attractions,1,1,25
+SDN-MUNICIPALITIES,https://surigaodelnorte.gov.ph/city-municipalities/,provincial_government,Surigao del Norte,municipality directory,1,1,30
+SURIGAO-CITY,https://www.surigaocity.gov.ph/ui/tourism,city_government,Surigao City,tourism attractions,1,1,30
+SDS-TOURISM,https://surigaodelsur.gov.ph/tourism/spotlight,provincial_government,Surigao del Sur,tourism spotlight,1,1,30
+SDS-CAGWAIT,https://surigaodelsur.gov.ph/tourism/cagwait,provincial_government,Cagwait,municipality tourism,1,1,20
+SIARGAO-FINDER-BLOG,https://www.siargaofinder.com/blog,local_travel_guide,Siargao,blog index,1,2,45
+SIARGAO-FINDER-GL,https://www.siargaofinder.com/blog/general-luna-travel-guide,local_travel_guide,General Luna,travel guide,1,1,15
+SIARGAO-FINDER-PACIFICO,https://www.siargaofinder.com/blog/pacifico-travel-guide,local_travel_guide,Pacifico / San Isidro,travel guide,1,1,15
+SIARGAO-FINDER-BEACHES,https://www.siargaofinder.com/blog/best-beaches-in-siargao,local_travel_guide,Siargao,beach guide,1,1,15
+SIARGAO-FINDER-STAY,https://www.siargaofinder.com/blog/where-to-stay-in-siargao,local_travel_guide,Siargao,accommodation areas,1,1,15
+TRAVELA-SIARGAO,https://www.travelasiargao.com/stories/complete-siargao-travel-guide-first-timers,local_travel_guide,Siargao,first-timer guide,1,1,20
+DISCOVER-SIARGAO-GETTING,https://discoversiargao.com/travel-guide/how-to-get-there,local_travel_guide,Siargao,transport guide,1,1,20
+DISCOVER-SIARGAO-BOAT,https://discoversiargao.com/travel-guide/siargao-boat-schedule,local_travel_guide,Siargao,transport guide,1,1,15
+DISCOVER-SIARGAO-SPOTS,https://discoversiargao.com/what-to-do-in-siargao-island-philippines/24-siargao-tourist-spots-things-to-do-travel-guide,local_travel_guide,Siargao,attraction guide,1,1,20
+PH-BEACHES-SIARGAO,https://www.philippinebeaches.org/top-things-to-do-siargao-tourist-spots/,travel_guide,Siargao,attraction guide,1,1,20
+TOURISMPH-SIARGAO-STAY,https://tourism.ph/travel-guides/where-to-stay-siargao/,travel_guide,Siargao,area comparison,1,1,20
+TOURISMPH-SIARGAO-AIRPORT,https://tourism.ph/travel-guides/siargao-airport-to-general-luna/,travel_guide,Siargao,airport transfer guide,1,1,20
+TOURISMPH-SIARGAO-HOPPING,https://tourism.ph/travel-guides/siargao-island-hopping-guide/,travel_guide,Siargao,island hopping guide,1,1,20
+TOURISMPH-SIARGAO-ITIN,https://tourism.ph/travel-guides/siargao-itinerary-5-days/,travel_guide,Siargao,itinerary guide,1,1,20
